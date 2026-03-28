@@ -6,7 +6,15 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node server/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prescrape": "node server/cron-prescrape.js",
+    "prescrape:now": "node server/cron-prescrape.js --now",
+    "docker:build": "docker build -t aggie-dining-tracker .",
+    "docker:run": "docker run --env-file .env -p 3333:3333 -v dining_data:/app/data aggie-dining-tracker",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f app",
+    "docker:cron-logs": "docker compose logs -f cron"
   },
   "keywords": [],
   "author": "",
@@ -15,8 +23,12 @@
   "dependencies": {
     "better-sqlite3": "^12.8.0",
     "cheerio": "^1.2.0",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "google-auth-library": "^10.6.2",
+    "jsonwebtoken": "^9.0.3",
     "node-fetch": "^2.7.0",
     "puppeteer": "^24.40.0",
     "puppeteer-extra": "^3.3.6",

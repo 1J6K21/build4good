@@ -4,113 +4,49 @@ const cheerio = require('cheerio');
 
 puppeteer.use(StealthPlugin());
 
-// Hardcoded TAMU location data (from HTML analysis)
-const LOCATIONS = [
-  {
-    id: '59972586ee596fe55d2eef75',
-    name: 'The Commons Dining Hall (South Campus)',
-    slug: 'the-commons-dining-hall-south-campus',
-    group: 'Dining Halls (All-You-Care-To-Eat)'
-  },
-  {
-    id: '587909deee596f31cedc179c',
-    name: 'Sbisa Dining Hall (North Campus)',
-    slug: 'sbisa-dining-hall-north-campus',
-    group: 'Dining Halls (All-You-Care-To-Eat)'
-  },
-  {
-    id: '5878eb5cee596f847636f114',
-    name: 'Duncan Dining Hall (South Campus/Quad)',
-    slug: 'duncan-dining-hall-south-campus-quad',
-    group: 'Dining Halls (All-You-Care-To-Eat)'
-  },
-  {
-    id: '5873c5f43191a200e44eba43',
-    name: '1876 Burgers - Sbisa Complex',
-    slug: '1876-burgers-sbisa-complex',
-    group: 'North Campus'
-  },
-  {
-    id: '586d0bf1ee596f6e75049512',
-    name: 'Chick-Fil-A - Sbisa Underground Food Court',
-    slug: 'chick-fil-a-sbisa-underground-food-court',
-    group: 'North Campus'
-  },
-  {
-    id: '5c9a291319e02b0c4cd18d87',
-    name: "Copperhead Jack's - Sbisa Complex",
-    slug: 'copperhead-jacks-sbisa-complex',
-    group: 'North Campus'
-  },
-  {
-    id: '586e7f19ee596f4034e1f5d0',
-    name: 'Einstein Bros. Bagels - Sbisa Complex',
-    slug: 'einstein-bros-bagels-sbisa-complex',
-    group: 'North Campus'
-  },
-  {
-    id: '5873c5f33191a200e44eba3c',
-    name: 'Pizza @ Underground',
-    slug: 'pizza-underground',
-    group: 'North Campus'
-  },
-  {
-    id: '5873c5f33191a200e44eba41',
-    name: 'Cabo Grill - MSC',
-    slug: 'cabo-grill-msc',
-    group: 'Central Campus'
-  },
-  {
-    id: '5f04e0800101560bba2e7ee1',
-    name: 'Chick-Fil-A - MSC Food Court',
-    slug: 'chick-fil-a-msc-food-court',
-    group: 'Central Campus'
-  },
-  {
-    id: '586d0bf1ee596f6e75049513',
-    name: 'Panda Express - MSC',
-    slug: 'panda-express-msc',
-    group: 'Central Campus'
-  },
-  {
-    id: '5873c5f43191a200e44eba45',
-    name: "Rev's American Grill - MSC",
-    slug: 'revs-american-grill-msc',
-    group: 'Central Campus'
-  },
-  {
-    id: '5873c5f33191a200e44eba42',
-    name: 'Shake Smart - MSC',
-    slug: 'shake-smart-msc',
-    group: 'Central Campus'
-  },
-  {
-    id: '586d0bf1ee596f6e75049511',
-    name: 'Chick-fil-A - West Campus Food Hall',
-    slug: 'chick-fil-a-west-campus-food-hall',
-    group: 'West Campus'
-  },
-  {
-    id: '5ff34e653a585b113c081c17',
-    name: 'Panda Express - Polo Garage',
-    slug: 'panda-express-polo-garage',
-    group: 'East Campus'
-  },
-  {
-    id: '5ff34f9a3a585b1145e16abd',
-    name: 'Salata',
-    slug: 'salata',
-    group: 'East Campus'
-  }
+// ── Proxy Rotation ──────────────────────────────────────────────────────────
+// Populate PROXY_LIST env var with comma-separated proxy URLs to enable rotation.
+// Example: PROXY_LIST=http://user:pass@p1.example.com:8080,http://user:pass@p2.example.com:8080
+const PROXY_LIST = (process.env.PROXY_LIST || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+function pickProxy() {
+  if (!PROXY_LIST.length) return null;
+  return PROXY_LIST[Math.floor(Math.random() * PROXY_LIST.length)];
+}
+
+// ── User-Agent Pool ─────────────────────────────────────────────────────────
+// A diverse set of real Chrome UAs — desktop + mobile — so each request
+// looks like a different student hitting the site from their own device.
+const USER_AGENTS = [
+  // Desktop Chrome (various OS / versions)
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  // Desktop Firefox
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:124.0) Gecko/20100101 Firefox/124.0',
+  // Desktop Edge
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36 Edg/123.0.0.0',
+  // Desktop Safari
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+  // Mobile Chrome (Android)
+  'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.6312.80 Mobile Safari/537.36',
+  'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36',
+  // Mobile Safari (iPhone)
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Mobile/15E148 Safari/604.1',
 ];
 
-// Hardcoded meal periods (from HTML analysis)
-const PERIODS = [
-  { id: '69c728901eb93fe151791f30', name: 'Breakfast', slug: 'breakfast', startHour: 6, endHour: 10 },
-  { id: '69c728901eb93fe151791f32', name: 'Brunch', slug: 'brunch', startHour: 10, endHour: 15 },
-  { id: '69c728901eb93fe151791f31', name: 'Lunch', slug: 'lunch', startHour: 10, endHour: 15 },
-  { id: '69c728901eb93fe151791f2f', name: 'Dinner', slug: 'dinner', startHour: 15, endHour: 22 }
-];
+function pickUserAgent() {
+  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+}
+
+const { LOCATIONS, PERIODS } = require('./constants');
+const { saveMenu, updateScrapeJobStatus, upsertJob } = require('./db');
 
 function getCurrentPeriod() {
   const hour = new Date().getHours();
@@ -122,6 +58,46 @@ function getCurrentPeriod() {
 
 function getDefaultLocation() {
   return LOCATIONS[0]; // The Commons
+}
+
+function processMenuJson(json) {
+  if (!json?.period?.categories) return [];
+
+  return json.period.categories.map(cat => ({
+    name: (cat.name || '').trim(),
+    items: (cat.items || []).map(item => {
+      const nutrients = item.nutrients || [];
+      const getVal = (name) => {
+        const n = nutrients.find(n => n.name.toLowerCase().includes(name.toLowerCase()));
+        if (!n) return 0;
+        const val = parseInt(n.valueNumeric);
+        return isNaN(val) ? 0 : val;
+      };
+
+      const badges = [];
+      if (item.filters) {
+        item.filters.forEach(f => {
+          const name = f.name;
+          if (name.includes('Vegan')) badges.push('VG');
+          else if (name.includes('Vegetarian')) badges.push('V');
+          else if (name.includes('Gluten Free')) badges.push('GF');
+          else if (name.includes('Protein')) badges.push('PR');
+          else if (name.includes('Climate')) badges.push('CF');
+        });
+      }
+
+      return {
+        name: (item.name || '').trim(),
+        portion: item.portion || '',
+        calories: item.calories || 0,
+        protein: getVal('Protein'),
+        fat: getVal('Total Fat'),
+        carbs: getVal('Total Carbohydrates'),
+        badges,
+        description: (item.desc || '').trim()
+      };
+    })
+  }));
 }
 
 function parseMenuHtml(html) {
@@ -164,7 +140,8 @@ function parseMenuHtml(html) {
       const description = $(row).find('td').first().find('div.mt-1').text().trim();
 
       if (itemName) {
-        items.push({ name: itemName, portion: portionCell, calories, badges, description });
+        // Fallback items don't have protein/fat/carbs from static HTML easily
+        items.push({ name: itemName, portion: portionCell, calories, badges, description, protein: 0, fat: 0, carbs: 0 });
       }
     });
 
@@ -176,34 +153,73 @@ function parseMenuHtml(html) {
   return stations;
 }
 
-let browser = null;
-
-async function getBrowser() {
-  if (!browser) {
-    // Note: puppeteer-extra still uses the standard launch call
-    browser = await puppeteer.launch({
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--window-size=1920,1080']
-    });
+// NOTE: We intentionally do NOT cache the browser globally.
+// Each scrape job creates a fresh browser (optionally with a random proxy)
+// so the proxy actually rotates between jobs.
+async function createBrowser(proxy) {
+  const args = [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+    '--window-size=1920,1080',
+  ];
+  if (proxy) {
+    args.push(`--proxy-server=${proxy}`);
+    console.log(`[Scraper] Using proxy: ${proxy.replace(/:[^@]*@/, ':***@')}`);
   }
-  return browser;
+  return puppeteer.launch({ headless: 'new', args });
 }
 
 async function scrapeMenu(locationSlug, periodSlug, date, onStep = () => { }) {
+  const proxy = pickProxy();
+  const userAgent = pickUserAgent();
+
+  console.log(`[Scraper] UA: ${userAgent.slice(0, 60)}...`);
+
   onStep('Launching internal browser...');
-  const b = await getBrowser();
+  const b = await createBrowser(proxy);
+
   const page = await b.newPage();
 
+  // Setup interception for JSON menu data
+  let menuJson = null;
+  await page.setRequestInterception(false); // We just listen to responses
+
+  page.on('response', async (response) => {
+    const url = response.url();
+    // Intercept v4 menu API
+    if (url.includes('apiv4.dineoncampus.com') && url.includes('/menu') && url.includes(`date=${date}`)) {
+      try {
+        menuJson = await response.json();
+        console.log('[Scraper] Intercepted menu JSON response.');
+      } catch (e) {
+        // Quietly fail as it might not be JSON or other response
+      }
+    }
+  });
+
   try {
-    // Stealth plugin handles most headers, but we set a consistent UA
-    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36');
+    // Override UA with our randomly picked one
+    await page.setUserAgent(userAgent);
+
+    // If using a proxy with auth credentials, intercept the auth challenge
+    if (proxy) {
+      try {
+        const proxyUrl = new URL(proxy);
+        if (proxyUrl.username) {
+          await page.authenticate({ username: proxyUrl.username, password: proxyUrl.password });
+        }
+      } catch (_) { /* non-auth proxy */ }
+    }
 
     const url = `https://dineoncampus.com/tamu/whats-on-the-menu/${locationSlug}/${date}/${periodSlug}`;
     console.log('[Scraper] Fetching:', url);
     onStep(`Connecting to dineoncampus.com...`);
 
-    // Random initial wait to simulate human
-    await new Promise(r => setTimeout(r, Math.random() * 2000 + 1000));
+    // Random jitter to simulate human think-time between requests
+    const jitter = Math.random() * 2000 + 1000;
+    await new Promise(r => setTimeout(r, jitter));
 
     await page.goto(url, { waitUntil: 'networkidle0', timeout: 45000 });
 
@@ -216,20 +232,58 @@ async function scrapeMenu(locationSlug, periodSlug, date, onStep = () => { }) {
 
     onStep('Waiting for menu data to render...');
     try {
-      await page.waitForSelector('.accordion-header, table, #menu-content', { timeout: 15000 });
+      if (!menuJson) {
+        // Wait up to 10 seconds for the API to fire if page is already loaded
+        for (let i = 0; i < 10 && !menuJson; i++) {
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+      // Minimal wait for actual DOM table only if we don't have JSON
+      if (!menuJson) {
+        await page.waitForSelector('.accordion-header, table', { timeout: 10000 });
+      }
     } catch (e) {
-      console.log('[Scraper] Timeout waiting for menu markers.');
+      console.log('[Scraper] Info: Menu markers or JSON not found yet, trying one last wait.');
+      await new Promise(r => setTimeout(r, 3000));
     }
 
-    onStep('Parsing found menu items...');
-    await new Promise(r => setTimeout(r, 4000));
+    onStep('Processing menu items...');
 
+    // Prioritize intercepted JSON data
+    if (menuJson) {
+      console.log('[Scraper] Using rich JSON data for menu.');
+      const result = processMenuJson(menuJson);
+      if (result && result.length > 0) return result;
+      console.log('[Scraper] JSON processing returned no stations, trying fallback.');
+    }
+
+    console.log('[Scraper] Falling back to HTML parsing.');
     const html = await page.content();
     const stations = parseMenuHtml(html);
     console.log('[Scraper] Found stations:', stations.length);
     return stations;
   } finally {
     await page.close();
+    // Always close the browser so the proxy is truly released
+    await b.close().catch(() => { });
+  }
+}
+
+async function startScrapeProcess(locationSlug, periodSlug, date) {
+  try {
+    const stations = await scrapeMenu(locationSlug, periodSlug, date, (step) => {
+      updateScrapeJobStatus(locationSlug, periodSlug, date, step);
+    });
+
+    saveMenu(locationSlug, periodSlug, date, stations);
+
+    // Mark job as completed
+    const key = `${locationSlug}:${periodSlug}:${date}`;
+    upsertJob(key, 'ready', null, Date.now(), 'ready');
+  } catch (e) {
+    console.error('[Scraper] Job failed:', e);
+    const key = `${locationSlug}:${periodSlug}:${date}`;
+    upsertJob(key, 'failed', e.message, Date.now(), 'failed');
   }
 }
 
@@ -246,4 +300,4 @@ function parseSavedHtml() {
   return [];
 }
 
-module.exports = { LOCATIONS, PERIODS, getCurrentPeriod, getDefaultLocation, scrapeMenu, parseSavedHtml };
+module.exports = { LOCATIONS, PERIODS, getCurrentPeriod, getDefaultLocation, scrapeMenu, startScrapeProcess };

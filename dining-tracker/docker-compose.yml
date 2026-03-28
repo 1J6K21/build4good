@@ -1,0 +1,54 @@
+services:
+  # ── Main application ────────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    container_name: aggie-dining-app
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3333}:3333"
+    environment:
+      - NODE_ENV=production
+      - PORT=3333
+      - JWT_SECRET=${JWT_SECRET}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      # Optional: rotate proxies via this env var (comma-separated list)
+      # e.g. PROXY_LIST=http://user:pass@proxy1.com:8080,http://user:pass@proxy2.com:8080
+      - PROXY_LIST=${PROXY_LIST:-}
+    volumes:
+      # Persist the SQLite database between container restarts / deployments
+      - dining_data:/app/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3333/api/auth/config', r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ── Cron pre-scraper ─────────────────────────────────────────────────────────
+  # Runs the 5 AM prescrape job once daily inside the same Docker network so it
+  # can hit the app container directly. Uses the same image to keep Chrome the same.
+  cron:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    container_name: aggie-dining-cron
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PRESCRAPE_URL=http://app:3333
+      - PROXY_LIST=${PROXY_LIST:-}
+    volumes:
+      - dining_data:/app/data
+    # Override the default CMD with the cron script
+    command: ["node", "server/cron-prescrape.js"]
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  dining_data:
+    driver: local

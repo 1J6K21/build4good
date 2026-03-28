@@ -1,0 +1,51 @@
+# fly.toml — Aggie Dining Tracker
+# Deploy with: fly deploy (from the dining-tracker/ directory)
+# Docs: https://fly.io/docs/reference/configuration/
+
+app = "aggie-dining-tracker"        # ← change to your desired app name
+primary_region = "dfw"              # Dallas–Fort Worth — closest to College Station
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV   = "production"
+  PORT       = "3333"
+  # Secrets (never commit values here!) — set via:
+  #   fly secrets set JWT_SECRET="..." GOOGLE_CLIENT_ID="..."
+  # Optionally add PROXY_LIST for proxy rotation:
+  #   fly secrets set PROXY_LIST="http://user:pass@proxy1:port,http://user:pass@proxy2:port"
+
+[http_service]
+  internal_port       = 3333
+  force_https         = true
+  auto_stop_machines  = false   # keep at least one machine alive 24/7
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type       = "connections"
+    hard_limit = 100
+    soft_limit = 80
+
+[[vm]]
+  # Puppeteer/Chrome needs real memory — 1 GB is the minimum comfortable size
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1
+
+[[mounts]]
+  # Persist the SQLite database across deployments
+  source      = "dining_data"
+  destination = "/app/data"
+  initial_size = "1gb"
+
+[checks]
+  [checks.health]
+    grace_period = "20s"
+    interval     = "30s"
+    method       = "GET"
+    path         = "/api/auth/config"
+    port         = 3333
+    timeout      = "10s"
+    type         = "http"

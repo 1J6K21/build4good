@@ -26,3 +26,12 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+helper/api_debug.log
+
+# SQLite database
+*.db
+*.db-shm
+*.db-wal
+
+# Fly.io
+.fly/

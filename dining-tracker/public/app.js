@@ -1,122 +1,208 @@
 /* ════════════════════════════════════════════
-   Aggie Dining Tracker — Frontend App
-════════════════════════════════════════════ */
+   Aggie Dining Tracker — Frontend App (Authenticated)
+   ════════════════════════════════════════════ */
 
-const API = ''; // Use relative paths since it's served from the same origin
-
-// ── State ──────────────────────────────────
-let selectedItems = [];   // { name, calories, portion, station }
-let activePeriodSlug = 'dinner';
+const API = '';
+let currentUser = null;
+let selectedItems = [];
+let activePeriodSlug = getCurrentPeriodSlug();
 let activePeriodId = '';
 let pollTimer = null;
 let ringChart = null;
 let weekChart = null;
 
-// ── Storage helpers ───────────────────────
-const STORAGE_KEYS = {
-    logs: 'aggie_dining_logs',       // Array<DayLog>
-    shortcuts: 'aggie_dining_shortcuts',  // Array<Shortcut>
-    goal: 'aggie_dining_goal',       // number
-};
+// ── Token Storage ─────────────────────────────
+function getToken() { return localStorage.getItem('auth_token'); }
+function setToken(t) { localStorage.setItem('auth_token', t); }
+function clearToken() { localStorage.removeItem('auth_token'); }
 
-function getGoal() { return parseInt(localStorage.getItem(STORAGE_KEYS.goal) || '2000'); }
-function saveGoalVal(n) { localStorage.setItem(STORAGE_KEYS.goal, n); }
-
-function getLogs() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.logs) || '[]'); }
-    catch { return []; }
-}
-function saveLogs(logs) { localStorage.setItem(STORAGE_KEYS.logs, JSON.stringify(logs)); }
-
-function getShortcuts() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.shortcuts) || '[]'); }
-    catch { return []; }
-}
-function saveShortcuts(s) { localStorage.setItem(STORAGE_KEYS.shortcuts, JSON.stringify(s)); }
-
-function todayStr() { return new Date().toISOString().split('T')[0]; }
-
-function getTodayLogs() {
-    return getLogs().filter(l => l.date === todayStr());
+// authFetch: wraps fetch() with Authorization header automatically
+async function authFetch(url, opts = {}) {
+    const token = getToken();
+    const headers = { ...(opts.headers || {}) };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return fetch(url, { ...opts, headers });
 }
 
-function addLog(entry) {
-    const logs = getLogs();
-    logs.push(entry);
-    saveLogs(logs);
-}
+// ── Auth Handling ────────────────────────────
 
-function deleteLog(id) {
-    const logs = getLogs().filter(l => l.id !== id);
-    saveLogs(logs);
-}
-
-function getCalsByDate() {
-    // Returns { 'YYYY-MM-DD': totalCal } for last 7 days
-    const logs = getLogs();
-    const result = {};
-    for (let i = 6; i >= 0; i--) {
-        const d = new Date(); d.setDate(d.getDate() - i);
-        const k = d.toISOString().split('T')[0];
-        result[k] = 0;
+async function checkAuth() {
+    console.log("[Auth] Checking session...");
+    if (!getToken()) {
+        console.warn('[Auth] No token in localStorage.');
+        showPage('login');
+        initGoogleSignIn();
+        return;
     }
-    for (const l of logs) {
-        if (result[l.date] !== undefined) result[l.date] += l.totalCal;
+    try {
+        const res = await authFetch(`${API}/api/auth/me`);
+        const data = await res.json();
+
+        if (data.authenticated) {
+            console.log("[Auth] Success! Logged in as:", data.user.email);
+            currentUser = data.user;
+            onLoginSuccess();
+        } else {
+            console.warn("[Auth] No session found. Reason:", data.error || "none");
+            clearToken();
+            showPage('login');
+            initGoogleSignIn();
+        }
+    } catch (e) {
+        console.error('[Auth] Connection error', e);
+        showPage('login');
+        toast("Auth connection error. Retrying...");
     }
-    return result;
+}
+
+async function initGoogleSignIn() {
+    if (!window.google) return setTimeout(initGoogleSignIn, 100);
+
+    try {
+        const res = await fetch(`${API}/api/auth/config`);
+        const { googleClientId } = await res.json();
+
+        google.accounts.id.initialize({
+            client_id: googleClientId,
+            callback: handleCredentialResponse
+        });
+        google.accounts.id.renderButton(
+            document.getElementById("googleBtn"),
+            { theme: "outline", size: "large", width: 320 }
+        );
+    } catch (e) {
+        console.error('Failed to load login config', e);
+    }
+}
+
+async function handleCredentialResponse(response) {
+    try {
+        const res = await fetch(`${API}/api/auth/google`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ credential: response.credential })
+        });
+        const data = await res.json();
+        if (data.token && data.user) {
+            setToken(data.token);
+            currentUser = data.user;
+            onLoginSuccess();
+        }
+    } catch (e) {
+        toast('Login failed. Try again.');
+    }
+}
+
+function onLoginSuccess() {
+    document.querySelector('.navbar').style.display = 'flex';
+    document.getElementById('userAvatar').src = currentUser.picture;
+    document.getElementById('userName').textContent = currentUser.name;
+    document.getElementById('userEmail').textContent = currentUser.email;
+    showPage('dashboard');
+}
+
+async function logout() {
+    clearToken();
+    location.reload();
+}
+
+function toggleUserMenu() {
+    document.getElementById('userDropdown').classList.toggle('active');
+}
+
+// ── Data Sync ────────────────────────────────
+
+async function fetchLogs(date) {
+    const res = await authFetch(`${API}/api/user/logs?date=${date}`);
+    const data = await res.json();
+    return data.logs || [];
+}
+
+async function addLogEntry(date, mealType, items, name) {
+    const totalCal = items.reduce((s, i) => s + (i.calories || 0), 0);
+    for (const item of items) {
+        await authFetch(`${API}/api/user/logs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date, mealType, item })
+        });
+    }
+}
+
+async function removeLog(id) {
+    await authFetch(`${API}/api/user/logs/${id}`, { method: 'DELETE' });
+    refreshDashboard();
 }
 
 // ── Navigation ────────────────────────────
+
 function showPage(name) {
+    if (!currentUser && name !== 'login') return;
+
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById('page-' + name).classList.add('active');
-    document.getElementById('nav-' + name).classList.add('active');
+
+    const pageEl = document.getElementById('page-' + name);
+    if (pageEl) pageEl.classList.add('active');
+
+    const navEl = document.getElementById('nav-' + name);
+    if (navEl) navEl.classList.add('active');
 
     if (name === 'dashboard') refreshDashboard();
     if (name === 'menu') initMenuPage();
 }
 
 // ── Dashboard ─────────────────────────────
-function refreshDashboard() {
-    const goal = getGoal();
-    const todayLogs = getTodayLogs();
-    const totalCal = todayLogs.reduce((s, l) => s + l.totalCal, 0);
-    const remaining = Math.max(0, goal - totalCal);
 
-    document.getElementById('ringCurrent').textContent = totalCal.toLocaleString();
+async function refreshDashboard() {
+    if (!currentUser) return;
+
+    const date = todayStr();
+    const todayLogs = await fetchLogs(date);
+    const totals = todayLogs.reduce((acc, l) => {
+        acc.cal += (l.calories || 0);
+        acc.p += (l.protein || 0);
+        acc.f += (l.fat || 0);
+        acc.c += (l.carbs || 0);
+        return acc;
+    }, { cal: 0, p: 0, f: 0, c: 0 });
+
+    const goal = currentUser.calorie_goal || 2000;
+    const remaining = Math.max(0, goal - totals.cal);
+
+    document.getElementById('ringCurrent').textContent = totals.cal.toLocaleString();
     document.getElementById('ringGoal').textContent = goal.toLocaleString();
     document.getElementById('ringRemaining').textContent = remaining > 0
         ? `${remaining.toLocaleString()} remaining`
-        : `${(totalCal - goal).toLocaleString()} over goal`;
+        : `${(totals.cal - goal).toLocaleString()} over goal`;
+
+    document.getElementById('macroProtein').textContent = `${totals.p}g`;
+    document.getElementById('macroFat').textContent = `${totals.f}g`;
+    document.getElementById('macroCarbs').textContent = `${totals.c}g`;
 
     document.getElementById('todayDateLabel').textContent =
         new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
-    // Stats
-    document.getElementById('statMeals').textContent = todayLogs.length;
+    // Group logs by meal_type for display
+    const grouped = {};
+    todayLogs.forEach(l => {
+        if (!grouped[l.meal_type]) grouped[l.meal_type] = { type: l.meal_type, cals: 0, protein: 0, fat: 0, carbs: 0, items: [], id: l.id };
+        grouped[l.meal_type].cals += l.calories;
+        grouped[l.meal_type].protein += (l.protein || 0);
+        grouped[l.meal_type].fat += (l.fat || 0);
+        grouped[l.meal_type].carbs += (l.carbs || 0);
+        grouped[l.meal_type].items.push(l.item_name);
+    });
 
-    // Streak
-    const byDate = getCalsByDate();
-    let streak = 0;
-    for (const k of Object.keys(byDate).reverse()) {
-        if (byDate[k] > 0) streak++;
-        else break;
-    }
-    document.getElementById('statStreak').textContent = streak;
+    document.getElementById('statMeals').textContent = Object.keys(grouped).length;
 
-    const vals = Object.values(byDate);
-    const nonZero = vals.filter(v => v > 0);
-    const avg = nonZero.length ? Math.round(nonZero.reduce((a, b) => a + b, 0) / nonZero.length) : 0;
-    document.getElementById('statAvg').textContent = avg.toLocaleString();
+    // Simplified streak (just check last few days)
+    document.getElementById('statStreak').textContent = "?"; // Could fetch more history here
 
-    drawRing(totalCal, goal);
-    drawWeekChart(byDate, goal);
-    renderTodayMeals(todayLogs);
-    renderShortcuts();
+    drawRing(totals.cal, goal);
+    renderTodayMeals(Object.values(grouped));
 }
 
-// Donut ring
 function drawRing(current, goal) {
     const canvas = document.getElementById('calRingCanvas');
     if (!canvas) return;
@@ -124,7 +210,7 @@ function drawRing(current, goal) {
     const pct = Math.min(1, current / goal);
     const over = current > goal;
 
-    if (ringChart) { ringChart.destroy(); ringChart = null; }
+    if (ringChart) ringChart.destroy();
 
     ringChart = new Chart(ctx, {
         type: 'doughnut',
@@ -132,8 +218,7 @@ function drawRing(current, goal) {
             datasets: [{
                 data: pct < 1 ? [pct, 1 - pct] : [1, 0],
                 backgroundColor: [over ? '#ef4444' : '#500000', '#f0e8e8'],
-                borderWidth: 0,
-                hoverOffset: 0,
+                borderWidth: 0
             }]
         },
         options: {
@@ -145,525 +230,387 @@ function drawRing(current, goal) {
     });
 }
 
-// Weekly bar chart
-function drawWeekChart(byDate, goal) {
-    const labels = Object.keys(byDate).map(d => {
-        const dt = new Date(d + 'T12:00:00');
-        return dt.toLocaleDateString('en-US', { weekday: 'short' });
-    });
-    const data = Object.values(byDate);
-
-    const canvas = document.getElementById('weekChart');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-
-    if (weekChart) { weekChart.destroy(); weekChart = null; }
-
-    weekChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels,
-            datasets: [{
-                data,
-                backgroundColor: data.map((v, i) => {
-                    const isToday = i === data.length - 1;
-                    if (v === 0) return 'rgba(0,0,0,0.05)';
-                    if (v > goal) return 'rgba(239,68,68,0.7)';
-                    return isToday ? 'rgba(80,0,0,0.85)' : 'rgba(80,0,0,0.4)';
-                }),
-                borderRadius: 8,
-                borderSkipped: false,
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: { label: ctx => ` ${ctx.parsed.y.toLocaleString()} cal` }
-                }
-            },
-            scales: {
-                x: { grid: { display: false }, ticks: { font: { size: 12, family: 'Inter' } } },
-                y: {
-                    grid: { color: 'rgba(0,0,0,0.05)' },
-                    ticks: { font: { size: 11, family: 'Inter' }, callback: v => v > 0 ? v.toLocaleString() : '' },
-                    beginAtZero: true,
-                }
-            }
-        }
-    });
-}
-
-function renderTodayMeals(logs) {
+function renderTodayMeals(meals) {
     const el = document.getElementById('todayMealsList');
     if (!el) return;
-    if (!logs.length) {
+    if (!meals.length) {
         el.innerHTML = `<div class="empty-state"><div class="empty-icon">🥗</div><p>No meals logged today.</p><button class="btn btn-primary" onclick="showPage('menu')">Browse Menu</button></div>`;
         return;
     }
-    el.innerHTML = logs.map(l => `
-    <div class="meal-entry" id="meal-${l.id}" onclick="toggleMealEntry('${l.id}')">
+    el.innerHTML = meals.map(m => `
+    <div class="meal-entry">
       <div class="meal-entry-header">
         <div class="meal-entry-left">
-          <div class="meal-entry-name">${l.name}</div>
-          <div class="meal-entry-meta">${l.location} · ${l.period} · ${formatTime(l.timestamp)}</div>
+          <div class="meal-entry-name">${m.type.charAt(0).toUpperCase() + m.type.slice(1)}</div>
+          <div class="meal-entry-meta">${m.items.join(', ')}</div>
+          <div class="meal-entry-macros">
+            ${m.protein}g P · ${m.fat}g F · ${m.carbs}g C
+          </div>
         </div>
         <div class="meal-entry-right">
-          <div class="meal-cal-badge">${l.totalCal} cal</div>
-          <button class="meal-delete-btn" onclick="event.stopPropagation(); removeMeal('${l.id}')">🗑</button>
+          <div class="meal-cal-badge">${m.cals} cal</div>
+          <button class="meal-delete-btn" onclick="removeMeal('${m.id}')">🗑</button>
         </div>
       </div>
-      <div class="meal-entry-items">
-        ${l.items.map(i => `<div>• ${i.name} <span style="color:var(--text-3)">(${i.calories} cal${i.portion ? ' · ' + i.portion : ''})</span></div>`).join('')}
-        ${l.note ? `<div style="margin-top:6px;color:var(--text-3);font-style:italic">📝 ${l.note}</div>` : ''}
-      </div>
     </div>
   `).join('');
 }
 
-function toggleMealEntry(id) {
-    document.getElementById('meal-' + id)?.classList.toggle('expanded');
-}
-
-function removeMeal(id) {
-    deleteLog(id);
-    refreshDashboard();
-    toast('Meal removed');
-}
-
-function formatTime(ts) {
-    return new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-}
-
-function renderShortcuts() {
-    const el = document.getElementById('shortcutsList');
-    if (!el) return;
-    const shortcuts = getShortcuts();
-    if (!shortcuts.length) {
-        el.innerHTML = `<div class="empty-state"><div class="empty-icon">💾</div><p>Save a meal combo as a shortcut for fast logging.</p></div>`;
-        return;
+async function removeMeal(id) {
+    if (confirm('Delete this meal log?')) {
+        await removeLog(id);
+        toast('Logged meal removed');
     }
-    el.innerHTML = shortcuts.map((s, i) => `
-    <div class="shortcut-item">
-      <div>
-        <div class="shortcut-name">${s.name}</div>
-        <div class="shortcut-cal">${s.totalCal} cal · ${s.items.length} items</div>
-      </div>
-      <div class="shortcut-actions">
-        <button class="shortcut-log-btn" onclick="logShortcut(${i})">Quick Log</button>
-        <button class="shortcut-del-btn" onclick="deleteShortcut(${i})">✕</button>
-      </div>
-    </div>
-  `).join('');
 }
 
-function logShortcut(idx) {
-    const shortcuts = getShortcuts();
-    const s = shortcuts[idx];
-    if (!s) return;
-    addLog({
-        id: crypto.randomUUID(),
-        date: todayStr(),
-        timestamp: Date.now(),
-        name: s.name,
-        location: 'Quick Log',
-        period: '',
-        items: s.items,
-        totalCal: s.totalCal,
-        note: ''
-    });
-    refreshDashboard();
-    toast(`✓ Logged "${s.name}" (${s.totalCal} cal)`);
-}
+// ── Menu Page (Reused Logic) ─────────────────────────
 
-function deleteShortcut(idx) {
-    const shortcuts = getShortcuts();
-    shortcuts.splice(idx, 1);
-    saveShortcuts(shortcuts);
-    renderShortcuts();
-    toast('Shortcut removed');
-}
-
-// ── Goal Modal ───────────────────────────
-function openGoalModal() {
-    document.getElementById('goalInput').value = getGoal();
-    document.getElementById('goalModalBackdrop').classList.add('open');
-}
-function closeGoalModal() {
-    document.getElementById('goalModalBackdrop').classList.remove('open');
-}
-function saveGoal() {
-    const val = parseInt(document.getElementById('goalInput').value);
-    if (!val || val < 500) return;
-    saveGoalVal(val);
-    closeGoalModal();
-    refreshDashboard();
-    toast('Goal updated!');
-}
-
-// ── Menu Page ─────────────────────────────
 async function initMenuPage() {
-    // Populate location select
     await loadLocations();
-
-    // Set default date to today
     const dateInp = document.getElementById('dateInput');
+
+    // Set min/max to prevent selecting impossible dates
+    const today = new Date();
+    const minDate = new Date(); minDate.setDate(today.getDate() - 30);
+    const maxDate = new Date(); maxDate.setDate(today.getDate() + 14);
+
+    dateInp.min = minDate.toISOString().split('T')[0];
+    dateInp.max = maxDate.toISOString().split('T')[0];
+
     if (!dateInp.value) dateInp.value = todayStr();
-
     updateAvailablePeriods();
-
-    // Auto-select current period
-    const h = new Date().getHours();
-    const day = new Date().getDay();
-    const isWeekend = (day === 0 || day === 6);
-
-    if (h >= 6 && h < 10 && !isWeekend) selectPeriodBySlug('breakfast');
-    else if (h >= 10 && h < 15) {
-        if (isWeekend) selectPeriodBySlug('brunch');
-        else selectPeriodBySlug('lunch');
-    }
-    else selectPeriodBySlug('dinner');
-
-    // Load menu automatically
     loadMenu();
 }
 
 function updateAvailablePeriods() {
     const dateInput = document.getElementById('dateInput');
-    if (!dateInput) return;
     const dateStr = dateInput.value || todayStr();
     const day = new Date(dateStr + 'T12:00:00').getDay();
     const isWeekend = (day === 0 || day === 6);
 
+    let firstVisible = null;
+    let foundActive = false;
+
     document.querySelectorAll('.period-pill').forEach(btn => {
         const p = btn.dataset.period;
-        if (isWeekend) {
-            // Saturday/Sunday: Brunch, Dinner
-            if (p === 'brunch' || p === 'dinner') btn.style.display = 'block';
-            else btn.style.display = 'none';
+        const visible = (isWeekend && (p === 'brunch' || p === 'dinner')) || (!isWeekend && p !== 'brunch');
+        btn.style.display = visible ? 'block' : 'none';
+
+        if (visible) {
+            if (!firstVisible) firstVisible = p;
+            if (p === activePeriodSlug) {
+                btn.classList.add('active');
+                foundActive = true;
+            } else {
+                btn.classList.remove('active');
+            }
         } else {
-            // Weekdays: Breakfast, Lunch, Dinner
-            if (p === 'brunch') btn.style.display = 'none';
-            else btn.style.display = 'block';
+            btn.classList.remove('active');
         }
     });
 
-    // Ensure active is one of visible ones
-    const activeBtn = document.querySelector('.period-pill.active');
-    if (activeBtn && activeBtn.style.display === 'none') {
-        const firstVisible = document.querySelector('.period-pill[style="display: block"]');
-        if (firstVisible) selectPeriod(firstVisible);
+    // If current selected period is hidden on this date (e.g. Breakfast on Sunday), switch to Brunch
+    if (!foundActive && firstVisible) {
+        activePeriodSlug = firstVisible;
+        const btn = document.querySelector(`.period-pill[data-period="${activePeriodSlug}"]`);
+        if (btn) btn.classList.add('active');
+    }
+}
+
+function getCurrentPeriodSlug() {
+    const hour = new Date().getHours();
+    const day = new Date().getDay();
+    const isWeekend = (day === 0 || day === 6);
+
+    if (isWeekend) {
+        return hour < 15 ? 'brunch' : 'dinner';
+    } else {
+        if (hour < 10) return 'breakfast';
+        if (hour < 15) return 'lunch';
+        return 'dinner';
     }
 }
 
 async function loadLocations() {
-    try {
-        const res = await fetch(`${API}/api/locations`);
-        if (!res.ok) throw new Error('API down');
-        const data = await res.json();
-        const sel = document.getElementById('locationSelect');
-        if (!sel) return;
-
-        // Group them
-        const grouped = data.grouped || {};
-        sel.innerHTML = '';
-        for (const [group, locs] of Object.entries(grouped)) {
-            const og = document.createElement('optgroup');
-            og.label = group;
-            for (const loc of locs) {
-                const opt = document.createElement('option');
-                opt.value = JSON.stringify({ slug: loc.slug, id: loc.id, name: loc.name });
-                opt.textContent = loc.name;
-                og.appendChild(opt);
-            }
-            sel.appendChild(og);
-        }
-
-        // Select Commons by default if not set
-        if (!sel.value && data.locations.length > 0) {
-            sel.selectedIndex = 0;
-        }
-    } catch (e) {
-        console.error('Failed to load locations', e);
-        const sel = document.getElementById('locationSelect');
-        if (sel) sel.innerHTML = '<option value="">Error loading locations. Reloader page.</option>';
-    }
-}
-
-function selectPeriod(btn) {
-    document.querySelectorAll('.period-pill').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    activePeriodSlug = btn.dataset.period;
-    activePeriodId = btn.dataset.periodId;
-}
-
-function selectPeriodBySlug(slug) {
-    const btn = document.querySelector(`.period-pill[data-period="${slug}"]`);
-    if (btn) selectPeriod(btn);
-}
-
-function onFilterChange() {
-    updateAvailablePeriods();
-}
-
-async function retryScrape() {
-    clearPoll();
+    const res = await fetch(`${API}/api/locations`);
+    const data = await res.json();
     const sel = document.getElementById('locationSelect');
-    let locData;
-    try { locData = JSON.parse(sel.value); } catch { return; }
-    const date = document.getElementById('dateInput').value || todayStr();
-
-    await fetch(`${API}/api/menu/clear?locationSlug=${encodeURIComponent(locData.slug)}&periodSlug=${encodeURIComponent(activePeriodSlug)}&date=${date}`);
-    loadMenu();
+    const grouped = data.grouped || {};
+    sel.innerHTML = '';
+    for (const [group, locs] of Object.entries(grouped)) {
+        const og = document.createElement('optgroup');
+        og.label = group;
+        locs.forEach(loc => {
+            const opt = document.createElement('option');
+            opt.value = JSON.stringify({ slug: loc.slug, id: loc.id, name: loc.name });
+            opt.textContent = loc.name;
+            og.appendChild(opt);
+        });
+        sel.appendChild(og);
+    }
 }
 
 async function loadMenu() {
-    clearPoll();
     const sel = document.getElementById('locationSelect');
-    if (!sel || !sel.value) return;
-
-    let locData;
-    try { locData = JSON.parse(sel.value); } catch { return; }
-
+    if (!sel.value) return;
+    const locData = JSON.parse(sel.value);
     const date = document.getElementById('dateInput').value || todayStr();
 
-    showLoading(true);
-    document.getElementById('menuContent').innerHTML = '';
+    // Check if this is a Retail location (most don't have structured menus)
+    const isRetail = locData.name.includes('Chick-Fil-A') ||
+        locData.name.includes('Panda Express') ||
+        locData.name.includes('Pizza') ||
+        locData.name.includes('Burgers') ||
+        locData.name.includes('Bagels');
 
-    try {
-        const res = await fetch(`${API}/api/menu?locationSlug=${encodeURIComponent(locData.slug)}&periodSlug=${encodeURIComponent(activePeriodSlug)}&date=${date}`);
-        const data = await res.json();
-
-        if (data.status === 'ready') {
-            showLoading(false);
-            renderMenu(data.stations, locData.name, activePeriodSlug, date);
-        } else if (data.status === 'scraping') {
-            showScrapingState(data.first, data.message || 'Scraping...', locData.slug, date, data.step);
-        } else {
-            showLoading(false);
-            const err = data.error || data.message || 'Unknown error';
-            document.getElementById('menuContent').innerHTML = `
-                <div class="loading-state">
-                    <p style="color:var(--red)">⚠️ ${err}</p>
-                    <button class="btn btn-outline" style="margin-top:12px" onclick="retryScrape()">Retry Scrape</button>
-                </div>`;
-        }
-    } catch (err) {
+    if (isRetail) {
         showLoading(false);
-        document.getElementById('menuContent').innerHTML = `<div class="loading-state"><p style="color:var(--red)">⚠️ Server not reachable.</p></div>`;
-    }
-}
-
-function showScrapingState(isFirst, message, locationSlug, date, initialStep) {
-    showLoading(false);
-    document.getElementById('menuContent').innerHTML = `
-    <div class="scraping-container">
-      <div class="loading-big">🍽️</div>
-      <div class="loading-title" style="margin-top:16px">${isFirst ? "First View Today!" : "Loading Menu..."}</div>
-      
-      <div class="scraping-indicator"></div>
-
-      <div class="scraping-step">
-        <div class="scraping-step-label">Current Step</div>
-        <div class="scraping-step-text" id="scrapingStep">${initialStep || 'Initializing...'}</div>
-      </div>
-      
-      <p style="color:var(--text-3);font-size:0.85rem;margin-top:24px;line-height:1.5">${message}</p>
-    </div>
-  `;
-
-    // Poll every 4 seconds until ready
-    pollTimer = setInterval(async () => {
-        try {
-            const res = await fetch(`${API}/api/menu/status?locationSlug=${encodeURIComponent(locationSlug)}&periodSlug=${encodeURIComponent(activePeriodSlug)}&date=${date}`);
-            const data = await res.json();
-
-            if (data.status === 'ready') {
-                clearPoll();
-                loadMenu(); // reload fully
-            } else if (data.status === 'error') {
-                clearPoll();
-                document.getElementById('menuContent').innerHTML = `
-                <div class="loading-state">
-                    <p style="color:var(--red)">⚠️ Scrape failed: ${data.error}</p>
-                    <button class="btn btn-outline" style="margin-top:12px" onclick="retryScrape()">Retry Scrape</button>
-                </div>`;
-            } else if (data.status === 'pending') {
-                const stepEl = document.getElementById('scrapingStep');
-                if (stepEl && data.step) stepEl.textContent = data.step;
-            }
-        } catch { }
-    }, 4000);
-}
-
-function clearPoll() {
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-}
-
-function showLoading(show) {
-    const el = document.getElementById('menuLoading');
-    if (el) el.style.display = show ? 'flex' : 'none';
-}
-
-function renderMenu(stations, locationName, periodSlug, date) {
-    selectedItems = [];
-    updateLogBar();
-
-    const mc = document.getElementById('menuContent');
-    if (!mc) return;
-    if (!stations || !stations.length) {
-        mc.innerHTML = `
-            <div class="loading-state">
-                <div class="empty-icon">😪</div>
-                <p>No menu data available for this selection.</p>
-                <button class="btn btn-outline" style="margin-top:12px" onclick="retryScrape()">Force Refresh</button>
-            </div>`;
+        renderUnsupported(locData.name, activePeriodSlug);
         return;
     }
 
-    const periodLabel = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', brunch: 'Brunch' }[periodSlug] || periodSlug;
-    mc.innerHTML = `
-    <div style="margin-bottom:24px">
-      <h2 style="font-size:1.3rem;font-weight:800;letter-spacing:-0.02em">${locationName}</h2>
-      <p style="color:var(--text-3);font-size:0.88rem;margin-top:4px">${periodLabel} · ${new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
-    </div>
-    ${stations.map(s => `
-      <div class="station-block">
-        <div class="station-header">
-          <div class="station-line"></div>
-          <div class="station-name">${s.name}</div>
-          <div class="station-line"></div>
-        </div>
-        <div class="item-grid">
-          ${s.items.map(item => renderItem(item, s.name)).join('')}
-        </div>
-      </div>
-    `).join('')}
-  `;
+    showLoading(true);
+    console.log(`[Frontend] Fetching menu for: ${locData.slug} | ${activePeriodSlug} | ${date}`);
+    const res = await fetch(`${API}/api/menu?locationSlug=${encodeURIComponent(locData.slug)}&periodSlug=${encodeURIComponent(activePeriodSlug)}&date=${date}`);
+    const data = await res.json();
+    console.log('[Frontend] Menu API response:', data);
+
+    if (data.status === 'ready') {
+        showLoading(false);
+        renderMenu(data.stations, locData.name, activePeriodSlug, date);
+    } else if (data.status === 'scraping') {
+        showLoading(false);
+        renderScraping(data.step);
+        pollScrape(locData.slug, date);
+    } else if (data.status === 'failed') {
+        showLoading(false);
+        console.error('[Frontend] Scrape failed:', data.error);
+        renderError(data.error || 'Scrape failed');
+    }
 }
 
-function renderItem(item, station) {
-    const badges = (item.badges || []).map(b => `<span class="badge badge-${b}">${b}</span>`).join('');
-    const safeId = encodeURIComponent(item.name + '|' + station);
-    return `
-    <div class="menu-item" id="item-${safeId}" onclick="toggleItem(this, ${JSON.stringify(JSON.stringify({ name: item.name, calories: item.calories, portion: item.portion, station }))})">
-      <div class="item-name">${item.name}</div>
-      ${item.description ? `<div class="item-desc">${item.description}</div>` : ''}
-      <div class="item-footer">
-        <div>
-          <span class="item-cal">${item.calories}</span>
-          <span class="item-cal-unit">cal</span>
-        </div>
-        <span class="item-portion">${item.portion}</span>
-      </div>
-      ${badges ? `<div class="badges">${badges}</div>` : ''}
-    </div>
-  `;
+function pollScrape(slug, date) {
+    if (pollTimer) clearInterval(pollTimer);
+    console.log(`[Frontend] Started polling for status: ${slug}`);
+    pollTimer = setInterval(async () => {
+        const res = await fetch(`${API}/api/menu/status?locationSlug=${encodeURIComponent(slug)}&periodSlug=${encodeURIComponent(activePeriodSlug)}&date=${date}`);
+        const data = await res.json();
+        console.log('[Frontend] Status poll result:', data);
+
+        if (data.status === 'ready') {
+            clearInterval(pollTimer);
+            loadMenu();
+        } else if (data.status === 'failed') {
+            clearInterval(pollTimer);
+            renderError(data.error || 'Scrape failed');
+        } else if (data.status === 'scraping') {
+            renderScraping(data.step);
+        }
+    }, 3000);
 }
 
-function toggleItem(el, itemJsonStr) {
-    const item = JSON.parse(itemJsonStr);
-    el.classList.toggle('selected');
-    const idx = selectedItems.findIndex(i => i.name === item.name && i.station === item.station);
-    if (idx >= 0) selectedItems.splice(idx, 1);
-    else selectedItems.push(item);
+function renderMenu(stations, locName, period, date) {
+    selectedItems = [];
+    updateLogBar();
+    const mc = document.getElementById('menuContent');
+
+    if (!stations || stations.length === 0) {
+        const isFuture = new Date(date) > new Date();
+        mc.innerHTML = `
+            <h3>${locName} - ${period}</h3>
+            <div class="empty-state card glass shadow-lg" style="padding: 60px 20px; border-radius: 20px;">
+                <div class="empty-icon" style="font-size: 4rem; margin-bottom: 20px;">${isFuture ? '📅' : '🌙'}</div>
+                <p style="font-size: 1.2rem; margin-bottom: 8px;"><strong>${isFuture ? 'Menu not yet published' : 'Location is closed'}</strong></p>
+                <p class="form-hint" style="max-width: 300px; margin: 0 auto;">${isFuture ? 'Dining halls usually publish menus 1 week in advance. Check back soon!' : 'This location may be closed for the selected meal period or date.'}</p>
+                <button class="btn btn-ghost" style="margin-top: 24px;" onclick="showPage('dashboard')">Back to Dashboard</button>
+            </div>
+        `;
+        return;
+    }
+
+    mc.innerHTML = `<h3>${locName} - ${period}</h3>` + stations.map(s => `
+        <div class="station-block">
+            <div class="station-name">${s.name}</div>
+            <div class="item-grid">
+                ${s.items.map(item => {
+        const isSelected = selectedItems.find(i => i.name === item.name);
+        const servings = isSelected ? isSelected.servings : 1;
+        return `
+                    <div class="menu-item ${isSelected ? 'selected' : ''}" id="item-${item.name.replace(/\s+/g, '-')}" onclick="toggleItem(this, ${JSON.stringify(item).replace(/"/g, '&quot;')})">
+                        <div class="item-name">${item.name}</div>
+                        <div class="item-cal">${item.calories} cal</div>
+                        <div class="item-macros-preview">
+                            <span class="item-macro">P <strong>${item.protein || 0}g</strong></span>
+                            <span class="item-macro">F <strong>${item.fat || 0}g</strong></span>
+                            <span class="item-macro">C <strong>${item.carbs || 0}g</strong></span>
+                        </div>
+                        <div class="item-serving-controls" onclick="event.stopPropagation()">
+                            <button class="step-btn" onclick="changeServings('${item.name.replace(/'/g, "\\'")}', -0.5)">−</button>
+                            <span class="serving-val">${servings}</span>
+                            <button class="step-btn" onclick="changeServings('${item.name.replace(/'/g, "\\'")}', 0.5)">+</button>
+                        </div>
+                    </div>
+                `}).join('')}
+            </div>
+        </div>
+    `).join('');
+}
+
+function toggleItem(el, item) {
+    const idx = selectedItems.findIndex(i => i.name === item.name);
+    if (idx >= 0) {
+        selectedItems.splice(idx, 1);
+        el.classList.remove('selected');
+    } else {
+        item.servings = 1;
+        // Mocking macros for now as they aren't in the scraper yet, but we want to show them
+        // Better to have 0 than undefined
+        item.protein = item.protein || 0;
+        item.fat = item.fat || 0;
+        item.carbs = item.carbs || 0;
+        selectedItems.push(item);
+        el.classList.add('selected');
+    }
+    updateLogBar();
+}
+
+function changeServings(name, delta) {
+    const idx = selectedItems.findIndex(i => i.name === name);
+    if (idx < 0) return; // Item not selected
+
+    selectedItems[idx].servings = Math.max(0.5, selectedItems[idx].servings + delta);
+
+    // Update UI for the specific item
+    const itemEl = document.getElementById(`item-${name.replace(/\s+/g, '-')}`);
+    if (itemEl) {
+        const valEl = itemEl.querySelector('.serving-val');
+        if (valEl) valEl.textContent = selectedItems[idx].servings;
+    }
+
     updateLogBar();
 }
 
 function updateLogBar() {
     const bar = document.getElementById('logBar');
-    if (!bar) return;
-    if (!selectedItems.length) { bar.style.display = 'none'; return; }
+    if (!selectedItems.length) {
+        bar.style.display = 'none';
+        return;
+    }
     bar.style.display = 'block';
-    const totalCal = selectedItems.reduce((s, i) => s + (i.calories || 0), 0);
-    document.getElementById('logCount').textContent = `${selectedItems.length} item${selectedItems.length > 1 ? 's' : ''} selected`;
-    document.getElementById('logCalBadge').textContent = `${totalCal} cal`;
+
+    const totals = selectedItems.reduce((acc, i) => {
+        acc.cal += (i.calories || 0) * i.servings;
+        acc.p += (i.protein || 0) * i.servings;
+        acc.f += (i.fat || 0) * i.servings;
+        acc.c += (i.carbs || 0) * i.servings;
+        return acc;
+    }, { cal: 0, p: 0, f: 0, c: 0 });
+
+    document.getElementById('logCount').textContent = `${selectedItems.length} items`;
+    document.getElementById('logCalBadge').innerHTML = `
+        <span class="macro-val"><strong>${Math.round(totals.cal)}</strong> cal</span>
+        <span class="macro-divider">|</span>
+        <span class="macro-val"><strong>${Math.round(totals.p)}</strong>g protein</span>
+        <span class="macro-val"><strong>${Math.round(totals.f)}</strong>g fat</span>
+        <span class="macro-val"><strong>${Math.round(totals.c)}</strong>g carbs</span>
+    `;
 }
 
-function clearSelection() {
-    selectedItems = [];
-    document.querySelectorAll('.menu-item.selected').forEach(el => el.classList.remove('selected'));
-    updateLogBar();
-}
-
-// ── Log Modal ─────────────────────────────
 function openLogModal() {
-    if (!selectedItems.length) return;
-    const totalCal = selectedItems.reduce((s, i) => s + (i.calories || 0), 0);
-
-    const sel = document.getElementById('locationSelect');
-    let locName = 'TAMU Dining';
-    try { locName = JSON.parse(sel.value).name; } catch { }
-
-    // Build summary
-    const summaryHtml = selectedItems.map(i =>
-        `<div>• ${i.name} <span style="color:var(--text-3)">(${i.calories} cal)</span></div>`
-    ).join('');
-
-    document.getElementById('logSummary').innerHTML = `
-    ${summaryHtml}
-    <div class="log-summary-total">Total: ${totalCal} calories</div>
-  `;
-    document.getElementById('mealNameInput').value = '';
-    document.getElementById('mealNoteInput').value = '';
-    document.getElementById('saveShortcutCheck').checked = false;
     document.getElementById('logModalBackdrop').classList.add('open');
-
-    // Store context for confirm
-    window._logContext = { totalCal, locName };
 }
 
 function closeLogModal() {
     document.getElementById('logModalBackdrop').classList.remove('open');
 }
 
-function confirmLog() {
-    const { totalCal, locName } = window._logContext || {};
-    const name = document.getElementById('mealNameInput').value.trim() || `${locName} · ${{ breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', brunch: 'Brunch' }[activePeriodSlug]}`;
-    const note = document.getElementById('mealNoteInput').value.trim();
-    const saveShortcut = document.getElementById('saveShortcutCheck').checked;
+async function confirmLog() {
+    const date = todayStr();
+    // Multiply by servings before sending to legacy API or update API to handle servings
+    const itemsToLog = selectedItems.map(i => ({
+        ...i,
+        name: i.servings !== 1 ? `${i.name} (${i.servings} servings)` : i.name,
+        calories: Math.round((i.calories || 0) * i.servings),
+        protein: Math.round((i.protein || 0) * i.servings),
+        fat: Math.round((i.fat || 0) * i.servings),
+        carbs: Math.round((i.carbs || 0) * i.servings)
+    }));
 
-    const entry = {
-        id: crypto.randomUUID(),
-        date: todayStr(),
-        timestamp: Date.now(),
-        name,
-        location: locName,
-        period: activePeriodSlug,
-        items: [...selectedItems],
-        totalCal,
-        note,
-    };
-
-    addLog(entry);
-
-    if (saveShortcut) {
-        const shortcuts = getShortcuts();
-        shortcuts.push({ name, items: [...selectedItems], totalCal });
-        saveShortcuts(shortcuts);
-        toast(`✓ Meal logged & shortcut saved! (${totalCal} cal)`);
-    } else {
-        toast(`✓ Meal logged! (${totalCal} cal)`);
+    for (const item of itemsToLog) {
+        await addLogEntry(date, activePeriodSlug, [item]);
     }
 
     closeLogModal();
-    clearSelection();
-    // Go to dashboard to see the update
+    selectedItems = [];
+    updateLogBar();
     showPage('dashboard');
+    toast('Meal logged!');
 }
 
-// ── Toast ─────────────────────────────────
-function toast(msg, duration = 3000) {
-    const el = document.getElementById('toast');
-    if (!el) return;
-    el.textContent = msg;
-    el.classList.add('show');
-    setTimeout(() => el.classList.remove('show'), duration);
+function showLoading(show) { document.getElementById('menuLoading').style.display = show ? 'block' : 'none'; }
+function renderScraping(step) {
+    document.getElementById('menuContent').innerHTML = `
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p class="loading-title">Extracting nutritional data...</p>
+            <div class="scraping-step" style="background: rgba(80,0,0,0.05); padding: 10px 20px; border-radius: 8px; margin-top: 10px;">
+                <span style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-3); display: block; margin-bottom: 4px;">Current Step</span>
+                <strong style="color: var(--maroon);">${step || 'Initializing...'}</strong>
+            </div>
+        </div>
+    `;
 }
 
-// ── Init ──────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-    showPage('dashboard');
-});
+function renderUnsupported(locName, period) {
+    const mc = document.getElementById('menuContent');
+    mc.innerHTML = `
+        <h3>${locName} - ${period}</h3>
+        <div class="empty-state">
+            <div class="empty-icon">📍</div>
+            <p><strong>Menu not yet supported for this location.</strong></p>
+            <p class="form-hint">Retail locations like Chick-Fil-A or Panda Express don't publish their live daily menus in a standard format.</p>
+        </div>
+    `;
+}
+
+function renderError(msg) {
+    const mc = document.getElementById('menuContent');
+    mc.innerHTML = `
+        <div class="empty-state">
+            <div class="empty-icon">⚠️</div>
+            <p><strong>Something went wrong.</strong></p>
+            <p class="form-hint">${msg}</p>
+            <button class="btn btn-primary" style="margin-top:1rem" onclick="loadMenu()">Retry</button>
+        </div>
+    `;
+}
+
+function selectPeriod(btn) {
+    document.querySelectorAll('.period-pill').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activePeriodSlug = btn.dataset.period;
+    loadMenu(); // Auto-reload when period changes
+}
+
+function onFilterChange() {
+    loadMenu();
+}
+
+function clearSelection() {
+    selectedItems = [];
+    document.querySelectorAll('.menu-item.selected').forEach(el => {
+        el.classList.remove('selected');
+    });
+    updateLogBar();
+}
+
+function todayStr() { return new Date().toISOString().split('T')[0]; }
+
+function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+document.addEventListener('DOMContentLoaded', checkAuth);
+window.onclick = (e) => { if (!e.target.closest('.user-profile')) document.getElementById('userDropdown').classList.remove('active'); };

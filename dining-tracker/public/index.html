@@ -11,12 +11,26 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
-    <!-- Navigation -->
-    <nav class="navbar">
+    <div id="page-login" class="page">
+        <div class="auth-card">
+            <div class="auth-logo">
+                <span class="auth-logo-icon">🍽️</span>
+            </div>
+            <h1 class="auth-title">Aggie Dining</h1>
+            <p class="auth-subtitle">Track your macros across every TAMU dining hall with one click.</p>
+            <div id="googleBtn" class="auth-btn-wrapper"></div>
+            <p style="margin-top: 2rem; font-size: 0.8rem; opacity: 0.4;">Securely sign in with your @tamu.edu account
+            </p>
+        </div>
+    </div>
+
+    <!-- Navigation (Hidden when not logged in) -->
+    <nav class="navbar" style="display:none">
         <div class="nav-inner">
             <a class="nav-logo" href="#" onclick="showPage('dashboard')">
                 <span class="logo-icon">🍽️</span>
@@ -25,6 +39,17 @@
             <div class="nav-links">
                 <button class="nav-btn active" id="nav-dashboard" onclick="showPage('dashboard')">Dashboard</button>
                 <button class="nav-btn" id="nav-menu" onclick="showPage('menu')">Browse Menu</button>
+                <div class="user-profile" id="userProfile" onclick="toggleUserMenu()">
+                    <img id="userAvatar" src="" alt="Avatar" />
+                    <div id="userDropdown" class="user-dropdown">
+                        <div class="user-info">
+                            <span id="userName">User</span>
+                            <span id="userEmail">email@tamu.edu</span>
+                        </div>
+                        <hr />
+                        <button onclick="logout()">Sign Out</button>
+                    </div>
+                </div>
             </div>
         </div>
     </nav>
@@ -51,6 +76,22 @@
                 </div>
 
                 <div class="stats-col">
+                    <div class="stat-card card macro-summary-card">
+                        <div class="macro-items">
+                            <div class="macro-item">
+                                <div class="macro-val" id="macroProtein">0g</div>
+                                <div class="macro-lbl">Protein</div>
+                            </div>
+                            <div class="macro-item">
+                                <div class="macro-val" id="macroFat">0g</div>
+                                <div class="macro-lbl">Fat</div>
+                            </div>
+                            <div class="macro-item">
+                                <div class="macro-val" id="macroCarbs">0g</div>
+                                <div class="macro-lbl">Carbs</div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="stat-card card">
                         <div class="stat-icon">🔥</div>
                         <div class="stat-val" id="statMeals">0</div>
@@ -145,7 +186,7 @@
                     <label class="filter-label">📅 Date</label>
                     <input type="date" id="dateInput" class="filter-date" onchange="onFilterChange()" />
                 </div>
-                <button class="btn btn-primary filter-go" onclick="loadMenu()">Load Menu</button>
+
             </div>
 
             <!-- Loading state -->
