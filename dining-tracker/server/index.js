@@ -45,15 +45,16 @@ const globalLimiter = rateLimit({
     message: { error: 'Too many requests, please try again later.' }
 });
 
-// Stricter limit for Puppeteer scraping: 10 per hour
-const scrapeLimiter = rateLimit({
+// Stricter limit for STARTING a scrape: 100 per hour
+const scrapeStartLimiter = rateLimit({
     windowMs: 60 * 60 * 1000,
-    max: 10,
+    max: 100,
     message: { error: 'Scraping limit reached. Try again in an hour.' }
 });
 
 app.use('/api/', globalLimiter);
-app.use('/api/menu', scrapeLimiter);
+// Only apply the strict limit to the POST request that starts the scraper
+app.post('/api/menu', scrapeStartLimiter);
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key';
@@ -466,6 +467,6 @@ app.use((req, res) => {
 
 // ── START ──────────────────────────────────────────
 const PORT = process.env.PORT || 3333;
-app.listen(PORT, () => {
-    console.log(`\n🍽️  MindfulMacros (Auth-Enabled)\n   Running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n🍽️  MindfulMacros (Auth-Enabled)\n   Running on port ${PORT}`);
 });

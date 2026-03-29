@@ -252,12 +252,27 @@ async function createBrowser(proxy) {
     args.push(`--proxy-server=${proxy}`);
     console.log(`[Scraper] Using proxy: ${proxy.replace(/:[^@]*@/, ':***@')}`);
   }
-  return puppeteer.launch({ 
-    headless: 'new', 
+
+  const options = {
+    headless: 'new',
     args,
     ignoreHTTPSErrors: true,
     defaultViewport: { width: 1280, height: 800 }
-  });
+  };
+
+  // If running in Docker (Linux), prioritize the system chrome
+  if (process.platform === 'linux') {
+    const fs = require('fs');
+    const dockerPath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable';
+    if (fs.existsSync(dockerPath)) {
+      options.executablePath = dockerPath;
+    } else if (fs.existsSync('/usr/bin/google-chrome')) {
+      options.executablePath = '/usr/bin/google-chrome';
+    }
+  }
+
+  console.log(`[Scraper] Launching Chrome at: ${options.executablePath || 'default'}`);
+  return puppeteer.launch(options);
 }
 
 async function scrapeMenu(locationSlug, periodSlug, date, onStep = () => { }) {

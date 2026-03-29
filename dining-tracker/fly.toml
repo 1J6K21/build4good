@@ -3,7 +3,7 @@
 # Docs: https://fly.io/docs/reference/configuration/
 
 app = "mindful-macros"        # ← change to your desired app name
-primary_region = "dfw"              # Dallas–Fort Worth — closest to College Station
+primary_region = "ord"              # Chicago — High capacity for 1GB machines
 
 [build]
   dockerfile = "Dockerfile"
@@ -11,6 +11,7 @@ primary_region = "dfw"              # Dallas–Fort Worth — closest to College
 [env]
   NODE_ENV   = "production"
   PORT       = "3333"
+  PUPPETEER_EXECUTABLE_PATH = "/usr/bin/google-chrome-stable"
   # Secrets (never commit values here!) — set via:
   #   fly secrets set JWT_SECRET="..." GOOGLE_CLIENT_ID="..."
   # Optionally add PROXY_LIST for proxy rotation:
