@@ -53,6 +53,7 @@
             <div class="nav-links">
                 <button class="nav-btn active" id="nav-dashboard" onclick="showPage('dashboard')">Dashboard</button>
                 <button class="nav-btn" id="nav-menu" onclick="showPage('menu')">Browse Menu</button>
+                <button class="nav-btn" id="nav-other-food" onclick="showPage('other-food')">Other Food</button>
                 <button class="nav-btn" id="nav-leaderboard" onclick="showPage('leaderboard')">Leaderboard</button>
                 <button class="nav-btn" id="nav-experiments" onclick="showPage('experiments')">Experiments</button>
                 <button class="nav-btn" id="nav-mirror" onclick="showPage('mirror')">Mirror</button>
@@ -685,6 +686,41 @@
                     </div>
                 </div>
             </aside>
+        </div>
+    </div>
+
+    <!-- ======================= OTHER FOOD PAGE ======================= -->
+    <div id="page-other-food" class="page">
+        <div class="container">
+            <div class="card search-card full-width-card">
+                <div class="card-header">
+                    <div>
+                        <h2 style="margin:0">Search Global Foods</h2>
+                        <p class="card-hint">Look up anything from a banana to a Chick-fil-A sandwich (check "SR Legacy" for restaurant items).</p>
+                    </div>
+                </div>
+                <div class="search-input-wrapper" style="display: flex; gap: 10px; margin-top: 20px;">
+                    <input type="text" id="globalSearchInput" class="form-input" 
+                           placeholder="Search for food (e.g. Chick-fil-A, Apple, Rice)..." 
+                           list="globalFoodOptions"
+                           oninput="onGlobalSearchInput()"
+                           onkeyup="if(event.key==='Enter') searchGlobalFood()" 
+                           style="flex: 1;">
+                    <datalist id="globalFoodOptions"></datalist>
+                    <button class="btn btn-primary" onclick="searchGlobalFood()">
+                        <i class="fa-solid fa-magnifying-glass"></i> Search
+                    </button>
+                </div>
+                
+                <div id="globalSearchLoading" class="loading-state" style="display:none; padding: 40px 0; text-align: center;">
+                    <div class="spinner"></div>
+                    <p style="margin-top: 15px;">Searching USDA database...</p>
+                </div>
+
+                <div id="globalSearchResults" class="global-results-list" style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
+                    <!-- Results populated by JS -->
+                </div>
+            </div>
         </div>
     </div>
 

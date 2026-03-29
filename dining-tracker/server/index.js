@@ -183,6 +183,46 @@ app.post('/api/user/goal', authenticateToken, async (req, res) => {
     res.json({ success: true });
 });
 
+// ── USDA FOOD SEARCH ────────────────────────────────
+app.get('/api/external/search', authenticateToken, async (req, res) => {
+    const { query } = req.query;
+    console.log(`[USDA] Search Request: "${query}" | User: ${req.user.id}`);
+    if (!query) return res.status(400).json({ error: 'Query required' });
+    
+    // Using demo key if no key provided
+    const apiKey = process.env.USDA_API_KEY || 'DEMO_KEY';
+    const url = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(query)}&pageSize=20&api_key=${apiKey}&dataType=Branded,SR%20Legacy,Foundation`;
+    
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+        if (!response.ok) {
+            console.error('[USDA] API Error Resp:', data);
+            return res.status(response.status).json({ error: (data.error && data.error.message) || 'USDA API error' });
+        }
+        res.json(data);
+    } catch (e) {
+        console.error('[USDA] Network Error:', e.message);
+        res.status(500).json({ error: 'FDC search server-side connection fail' });
+    }
+});
+
+app.get('/api/external/food/:fdcId', authenticateToken, async (req, res) => {
+    const { fdcId } = req.params;
+    console.log(`[USDA] Detail Request: ${fdcId}`);
+    const apiKey = process.env.USDA_API_KEY || 'DEMO_KEY';
+    const url = `https://api.nal.usda.gov/fdc/v1/food/${fdcId}?api_key=${apiKey}`;
+    
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+        res.json(data);
+    } catch (e) {
+        console.error('USDA Detail Error:', e);
+        res.status(500).json({ error: 'FDC detail failed' });
+    }
+});
+
 app.get('/api/leaderboard', async (req, res) => {
     const { item } = req.query;
     if (!item) return res.json({ leaderboard: [] });

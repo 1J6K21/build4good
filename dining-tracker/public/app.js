@@ -174,11 +174,133 @@ function showPage(name) {
     const navEl = document.getElementById('nav-' + name);
     if (navEl) navEl.classList.add('active');
 
+    if (name === 'other-food') {
+        // Clear previous results when entering page
+        document.getElementById('globalSearchResults').innerHTML = '';
+        document.getElementById('globalSearchInput').value = '';
+    }
     if (name === 'dashboard') refreshDashboard();
     if (name === 'menu') initMenuPage();
     if (name === 'leaderboard') fetchLeaderboard();
     if (name === 'mirror') fetchMirror();
     if (name === 'experiments') fetchExperiments();
+}
+
+// ── GLOBAL FOOD SEARCH (USDA API) ─────────────────────────
+
+let globalSearchTimeout = null;
+
+function onGlobalSearchInput() {
+    clearTimeout(globalSearchTimeout);
+    const query = document.getElementById('globalSearchInput').value.trim();
+    if (query.length < 2) {
+        document.getElementById('globalSearchResults').innerHTML = '';
+        return;
+    }
+    globalSearchTimeout = setTimeout(() => {
+        searchGlobalFood();
+    }, 400); // 400ms debounce
+}
+
+async function searchGlobalFood() {
+    const input = document.getElementById('globalSearchInput');
+    const query = input.value.trim();
+    if (!query) return;
+
+    const resultsEl = document.getElementById('globalSearchResults');
+    const loadingEl = document.getElementById('globalSearchLoading');
+
+    // Only show loading if we don't have many results yet
+    if (resultsEl.children.length === 0) {
+        resultsEl.innerHTML = '';
+        loadingEl.style.display = 'block';
+    }
+
+    try {
+        const res = await authFetch(`${API}/api/external/search?query=${encodeURIComponent(query)}`);
+        const data = await res.json();
+        loadingEl.style.display = 'none';
+
+        if (data.error || !data.foods) {
+            resultsEl.innerHTML = `<div class="empty-state"><p>${data.error || 'Connection failed. Check your API key.'}</p></div>`;
+            return;
+        }
+
+        if (data.foods.length === 0 && query.length > 2) {
+            resultsEl.innerHTML = '<div class="empty-state"><p>No results found. Try a broader search.</p></div>';
+            return;
+        }
+
+        // Update autocomplete datalist
+        const datalist = document.getElementById('globalFoodOptions');
+        if (datalist) {
+            datalist.innerHTML = data.foods.slice(0, 10).map(f => `<option value="${f.description}">`).join('');
+        }
+
+        resultsEl.innerHTML = data.foods.map(f => {
+            const kcal = f.foodNutrients.find(n => n.nutrientId === 1008 || n.unitName === 'KCAL')?.value || 0;
+            const pro = f.foodNutrients.find(n => n.nutrientId === 1003)?.value || 0;
+            const fat = f.foodNutrients.find(n => n.nutrientId === 1004)?.value || 0;
+            const carb = f.foodNutrients.find(n => n.nutrientId === 1005)?.value || 0;
+            
+            return `
+            <div class="card result-item" onclick="logGlobalItemByFdcId(${f.fdcId}, '${f.description.replace(/'/g, "\\'")}')" style="cursor: pointer; padding: 15px; display: flex; justify-content: space-between; align-items: center; transition: transform 0.1s;">
+                <div style="flex: 1;">
+                    <div style="font-weight: 800; font-size: 0.9rem; color: var(--text-1);">${f.description}</div>
+                    <div style="font-size: 0.7rem; color: var(--text-3); text-transform: uppercase; margin-bottom: 8px;">${f.brandName || f.dataType || 'Common Food'}</div>
+                    <div style="display: flex; gap: 12px; font-size: 0.7rem; font-weight: 700; color: var(--text-2);">
+                        <span><strong style="color:var(--primary)">${Math.round(pro)}g</strong> P</span>
+                        <span><strong style="color:var(--primary)">${Math.round(carb)}g</strong> C</span>
+                        <span><strong style="color:var(--primary)">${Math.round(fat)}g</strong> F</span>
+                    </div>
+                </div>
+                <div style="text-align: right; border-left: 1px solid var(--border); padding-left: 15px; margin-left: 15px;">
+                    <div style="font-weight: 900; color: var(--primary); font-size: 1.3rem; line-height: 1;">${Math.round(kcal)}</div>
+                    <div style="font-size: 0.6rem; color: var(--text-3); font-weight: 800; letter-spacing: 0.05em;">CALORIES</div>
+                </div>
+            </div>
+        `}).join('');
+    } catch (e) {
+        loadingEl.style.display = 'none';
+        toast('Search failed. Check connection.');
+    }
+}
+
+async function logGlobalItemByFdcId(fdcId, fName) {
+    toast(`Fetching details: ${fName}...`);
+    try {
+        const res = await authFetch(`/api/external/food/${fdcId}`);
+        const data = await res.json();
+        
+        // Map FDC nutrients
+        const getVal = (id) => {
+            const n = data.foodNutrients.find(x => x.nutrient.id === id);
+            return n ? n.amount : 0;
+        };
+
+        const item = {
+            name: data.description,
+            calories: Math.round(getVal(1008) || getVal(1062)),
+            protein: Math.round(getVal(1003)),
+            fat: Math.round(getVal(1004)),
+            carbs: Math.round(getVal(1005)),
+            sodium: Math.round(getVal(1093)),
+            fiber: Math.round(getVal(1079)),
+            sugars: Math.round(getVal(1011) || getVal(2000)),
+            saturated_fat: Math.round(getVal(1258)),
+            trans_fat: Math.round(getVal(1257)),
+            cholesterol: Math.round(getVal(1253)),
+            serving_size: 1.0,
+            servings: 1.0,
+            portion: 1.0
+        };
+
+        // Inject into global selectedItems and open log modal
+        selectedItems = [item];
+        openLogModal();
+    } catch (e) {
+        toast('Detail fetch failed.');
+    }
 }
 
 // ── Dashboard ─────────────────────────────
@@ -1124,15 +1246,55 @@ function openLogModal() {
     const d = new Date((trackingDate || todayStr()) + 'T12:00:00');
     const dateStr = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
     
-    document.getElementById('logSummary').innerHTML = `
+    let summaryHtml = `
         <div style="display: flex; align-items: center; justify-content: space-between;">
             <strong style="color: var(--text-2);"><i class="fa-solid fa-calendar-day"></i> Logging Date:</strong>
             <span style="font-weight: 800; color: var(--primary);">${dateStr}</span>
         </div>
-        <div style="font-size: 0.8rem; color: var(--text-3); margin-top: 4px;">
-            ${selectedItems.length} item(s) selected
-        </div>
     `;
+
+    if (selectedItems.length === 1) {
+        const item = selectedItems[0];
+        const s = item.servings || 1;
+        summaryHtml += `
+            <div style="margin-top: 15px; background: var(--surface2); padding: 15px; border-radius: 12px; border: 1px solid var(--border);">
+                <div style="font-weight: 850; font-size: 1rem; color: var(--primary); margin-bottom: 8px;">${item.name}</div>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; text-align: center;">
+                    <div class="modal-mini-metric">
+                        <div style="font-size: 1.1rem; font-weight: 900; color: var(--primary);">${Math.round(item.calories * s)}</div>
+                        <div style="font-size: 0.6rem; font-weight: 800; color: var(--text-3); text-transform: uppercase;">Cals</div>
+                    </div>
+                    <div class="modal-mini-metric" style="border-left: 1px solid rgba(0,0,0,0.05);">
+                        <div style="font-size: 1.1rem; font-weight: 900; color: var(--primary);">${Math.round(item.protein * s)}g</div>
+                        <div style="font-size: 0.6rem; font-weight: 800; color: var(--text-3); text-transform: uppercase;">Prot</div>
+                    </div>
+                    <div class="modal-mini-metric" style="border-left: 1px solid rgba(0,0,0,0.05);">
+                        <div style="font-size: 1.1rem; font-weight: 900; color: var(--primary);">${Math.round(item.carbs * s)}g</div>
+                        <div style="font-size: 0.6rem; font-weight: 800; color: var(--text-3); text-transform: uppercase;">Carb</div>
+                    </div>
+                    <div class="modal-mini-metric" style="border-left: 1px solid rgba(0,0,0,0.05);">
+                        <div style="font-size: 1.1rem; font-weight: 900; color: var(--primary);">${Math.round(item.fat * s)}g</div>
+                        <div style="font-size: 0.6rem; font-weight: 800; color: var(--text-3); text-transform: uppercase;">Fat</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    } else {
+        const totals = selectedItems.reduce((acc, i) => {
+            const s = i.servings || 1;
+            acc.cal += (i.calories || 0) * s;
+            return acc;
+        }, { cal: 0 });
+
+        summaryHtml += `
+            <div style="margin-top: 15px; background: var(--surface2); padding: 15px; border-radius: 12px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+                <div style="font-size: 0.85rem; font-weight: 800; color: var(--text-2);">${selectedItems.length} items selected</div>
+                <div style="font-weight: 900; color: var(--primary); font-size: 1.1rem;">${Math.round(totals.cal)} <span style="font-size:0.7rem; font-weight:700; color:var(--text-3)">TOT CALS</span></div>
+            </div>
+        `;
+    }
+
+    document.getElementById('logSummary').innerHTML = summaryHtml;
     
     // Select the appropriate meal type based on activePeriodSlug
     document.querySelectorAll('#mealTypeControl .segment-btn').forEach(b => {

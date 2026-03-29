@@ -4127,3 +4127,60 @@ body {
   background: var(--surface2);
   border: 1px solid var(--border);
 }
+
+/* ── Other Food Search ── */
+.global-results-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.result-item {
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.result-item:hover {
+    transform: translateY(-2px);
+    border-color: var(--primary) !important;
+    background: var(--primary-dim) !important;
+}
+
+.result-info {
+    flex: 1;
+}
+
+.result-name {
+    font-weight: 800;
+    font-size: 0.95rem;
+    color: var(--text);
+    margin-bottom: 2px;
+    line-height: 1.3;
+}
+
+.result-brand {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.result-macros {
+    text-align: right;
+    min-width: 80px;
+}
+
+.result-macros .val {
+    font-size: 1.2rem;
+    font-weight: 900;
+    color: var(--primary);
+    line-height: 1;
+}
+
+.result-macros .lbl {
+    font-size: 0.6rem;
+    font-weight: 800;
+    color: var(--text-3);
+    text-transform: uppercase;
+}
