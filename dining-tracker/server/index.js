@@ -33,6 +33,28 @@ if (staleDeleted > 0) {
 const fs = require('fs');
 
 const app = express();
+const rateLimit = require('express-rate-limit');
+
+// Fly.io uses a proxy; needed for rate limiter to see real IPs
+app.set('trust proxy', 1);
+
+// Global rate limit: 200 requests per 15 minutes
+const globalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 200,
+    message: { error: 'Too many requests, please try again later.' }
+});
+
+// Stricter limit for Puppeteer scraping: 10 per hour
+const scrapeLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 10,
+    message: { error: 'Scraping limit reached. Try again in an hour.' }
+});
+
+app.use('/api/', globalLimiter);
+app.use('/api/menu', scrapeLimiter);
+
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key';
 

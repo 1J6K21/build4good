@@ -19,7 +19,10 @@ primary_region = "dfw"              # Dallas–Fort Worth — closest to College
 [http_service]
   internal_port       = 3333
   force_https         = true
-  auto_stop_machines  = false   # keep at least one machine alive 24/7
+  # --- COST / SLEEP SETTINGS ---
+  # During demo: Set auto_stop_machines=false to keep app hot.
+  # After demo: Set auto_stop_machines=true and min_machines_running=0 to spend $0.
+  auto_stop_machines  = false   
   auto_start_machines = true
   min_machines_running = 1
 
