@@ -175,6 +175,7 @@ function showPage(name) {
 
     if (name === 'dashboard') refreshDashboard();
     if (name === 'menu') initMenuPage();
+    if (name === 'leaderboard') fetchLeaderboard();
 }
 
 // ── Dashboard ─────────────────────────────
@@ -1672,12 +1673,10 @@ async function updateWeightProjection() {
             return;
         }
 
-        // Calculate average only based on days that have passed in the period
-        // or starting from the first log date if it's more recent in the period.
-        const logsSorted = [...logs].sort((a,b) => new Date(a.date) - new Date(b.date));
-        const firstLogD = logsSorted.length > 0 ? new Date(logsSorted[0].date) : new Date();
-        const effectiveStart = firstLogD > startD ? firstLogD : startD;
-        const daysWithLogs = Math.max(1, Math.round((endD - effectiveStart) / (1000 * 60 * 60 * 24)) + 1);
+        // Calculate average only based on days that actually have data
+        // We split by 'T' to discard any time component, ensuring we only count distinct calendar days
+        const uniqueDates = new Set(logs.map(l => l.date.split('T')[0]));
+        const daysWithLogs = Math.max(1, uniqueDates.size);
 
         const totalCals = logs.reduce((acc, l) => acc + (l.calories || 0), 0);
         const totalProt = logs.reduce((acc, l) => acc + (l.protein || 0), 0);
@@ -1742,4 +1741,164 @@ function clearMealSelection() {
     selectedLoggedMeals = [];
     refreshDashboard();
     toast('Selection cleared');
+}
+
+// ── LEADERBOARD ─────────────────────────────
+let leaderboardDebounce = null;
+async function fetchLeaderboard(query = null) {
+    const inputEl = document.getElementById('leaderboardSearchInput');
+    const contentEl = document.getElementById('leaderboardContent');
+    if (!inputEl || !contentEl) return;
+    
+    // Ensure query is a string before using it, otherwise fallback to input
+    const targetQuery = (typeof query === 'string' && query.trim() !== '') ? query.trim() : inputEl.value.trim();
+
+    if (!targetQuery) {
+        contentEl.innerHTML = '<div class="empty-state">Type a food item to see the leaderboard!</div>';
+        return;
+    }
+
+    try {
+        contentEl.innerHTML = '<div class="spinner"></div><p style="text-align:center; font-weight:bold;">Pulling latest records...</p>';
+        const res = await authFetch(`${API}/api/leaderboard?item=${encodeURIComponent(targetQuery)}`);
+        const data = await res.json();
+        
+        let headerHtml = `<h3 style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; font-weight: 800; text-transform: uppercase;">Tracking: "${targetQuery}"</h3>`;
+
+        if (!data.leaderboard || data.leaderboard.length === 0) {
+            contentEl.innerHTML = headerHtml + `<div class="empty-state">No one has logged "${targetQuery}" yet. Be the first!</div>`;
+            return;
+        }
+
+        let html = headerHtml;
+        let top3 = data.leaderboard.slice(0, 3);
+        let rest = data.leaderboard.slice(3);
+
+        if (top3.length > 0) {
+            html += `<div class="podium-container" style="display: flex; justify-content: center; align-items: stretch; gap: 8px; margin-bottom: 30px; margin-top: 20px; border-bottom: 2px solid #000; padding-bottom: 15px;">`;
+            
+            const podiumOrder = [];
+            if (top3.length === 1) {
+                podiumOrder.push({ user: top3[0], rank: 1, height: '160px', bg: 'var(--primary)', color: '#fff' });
+            } else if (top3.length === 2) {
+                podiumOrder.push({ user: top3[1], rank: 2, height: '120px', bg: '#e5e5e5', color: '#000' });
+                podiumOrder.push({ user: top3[0], rank: 1, height: '160px', bg: 'var(--primary)', color: '#fff' });
+            } else {
+                podiumOrder.push({ user: top3[1], rank: 2, height: '120px', bg: '#e5e5e5', color: '#000' });
+                podiumOrder.push({ user: top3[0], rank: 1, height: '160px', bg: 'var(--primary)', color: '#fff' });
+                podiumOrder.push({ user: top3[2], rank: 3, height: '80px', bg: '#dfdfdf', color: '#000' });
+            }
+
+            podiumOrder.forEach(item => {
+                html += `
+                <div style="display: flex; flex-direction: column; width: 120px;">
+                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: flex-end; flex: 1;">
+                        <div style="position: relative; margin-bottom: 8px;">
+                            ${item.rank === 1 ? '<div style="position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font-size: 1.5rem;">👑</div>' : ''}
+                            <img src="${item.user.picture || 'assets/default-avatar.png'}" style="width: 55px; height: 55px; border-radius: 50%; border: 2px solid #000; background: #fff; object-fit: cover;" onerror="this.src='https://ui-avatars.com/api/?name='+encodeURIComponent('${item.user.name}')"/>
+                        </div>
+                        <div style="width: 100%; height: ${item.height}; background: ${item.bg}; color: ${item.color}; border: 2px solid #000; display: flex; justify-content: center; align-items: flex-start; padding-top: 10px;">
+                            <span style="font-size: 1.5rem; font-weight: 800;">${item.rank}</span>
+                        </div>
+                    </div>
+                    <div style="margin-top: 10px; text-align: center;">
+                        <div style="font-size: 0.85rem; font-weight: 800; text-transform: uppercase; line-height: 1.2;">${item.user.name}</div>
+                        <div style="font-size: 0.75rem; font-weight: bold; color: var(--primary); margin-top: 4px;">${item.user.count} LOGS</div>
+                    </div>
+                </div>
+                `;
+            });
+            html += `</div>`;
+        }
+
+        if (rest.length > 0) {
+            html += `<div class="leaderboard-list">`;
+            rest.forEach((user, idx) => {
+                const rank = idx + 4;
+                html += `
+                    <div class="leaderboard-row" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; border-bottom: 1px dashed #000;">
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <div style="font-size: 1.2rem; font-weight: 800; width: 30px;">#${rank}</div>
+                            <img src="${user.picture || 'assets/default-avatar.png'}" style="width: 40px; height: 40px; border-radius: 50%; border: 1px solid #000; object-fit: cover;" onerror="this.src='https://ui-avatars.com/api/?name='+encodeURIComponent('${user.name}')"/>
+                            <div style="font-weight: 700; font-size: 1rem; text-transform: uppercase;">${user.name}</div>
+                        </div>
+                        <div style="font-weight: 800; font-size: 1.1rem;">
+                            ${user.count} <span style="font-size: 0.7rem; font-weight: normal; font-style: italic;">LOGS</span>
+                        </div>
+                    </div>
+                `;
+            });
+            html += `</div>`;
+        }
+        
+        contentEl.innerHTML = html;
+    } catch (e) {
+        console.error('Leaderboard error', e);
+        contentEl.innerHTML = '<div class="empty-state text-red">Failed to load leaderboard.</div>';
+    }
+}
+
+let mealsCollapsed = false;
+
+function toggleMealsCollapse() {
+    mealsCollapsed = !mealsCollapsed;
+    const wrapper = document.getElementById('todayMealsListWrapper');
+    const icon = document.getElementById('mealsCollapseIcon');
+    if (wrapper) {
+        if (mealsCollapsed) {
+            wrapper.style.maxHeight = '0px';
+            wrapper.style.opacity = '0';
+            if(icon) icon.style.transform = 'rotate(180deg)';
+        } else {
+            wrapper.style.maxHeight = '5000px';
+            wrapper.style.opacity = '1';
+            if(icon) icon.style.transform = 'rotate(0deg)';
+        }
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.getElementById('leaderboardSearchInput');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(leaderboardDebounce);
+            leaderboardDebounce = setTimeout(() => {
+                fetchLeaderboard(e.target.value);
+            }, 500);
+        });
+    }
+});
+
+// ── EXTERNAL CALORIES GAP FILLER ───────────
+async function addExternalCalories() {
+    const input = document.getElementById('gapCaloriesInput');
+    if (!input) return;
+    const calories = parseInt(input.value);
+    
+    if (isNaN(calories) || calories <= 0) {
+        toast('Please enter a valid number of calories.');
+        return;
+    }
+    
+    const itemToLog = {
+        name: 'Filled calorie gap',
+        calories: calories,
+        portion: '1 Custom',
+        protein: 0,
+        fat: 0,
+        carbs: 0
+    };
+    
+    const date = trackingDate || todayStr();
+    
+    const success = await addLogEntry(date, 'snack', [itemToLog]);
+    
+    if (success) {
+        input.value = '';
+        toast(`Added ${calories} external calories!`);
+        // Refresh the dashboard to show new calorie total
+        refreshDashboard();
+    } else {
+        toast('Failed to add external calories.');
+    }
 }
