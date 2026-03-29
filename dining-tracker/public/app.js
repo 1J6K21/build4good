@@ -329,9 +329,9 @@ async function refreshDashboard() {
     }, { cal: 0, p: 0, f: 0, c: 0, sodium: 0, fiber: 0, sugar: 0 });
 
     const calGoal = currentUser.calorie_goal || 2000;
-    const proGoal = currentUser.protein_goal || 120;
-    const fatGoal = currentUser.fat_goal || 70;
-    const carbGoal = currentUser.carb_goal || 250;
+    const proGoal = currentUser.protein_goal;
+    const fatGoal = currentUser.fat_goal;
+    const carbGoal = currentUser.carb_goal;
 
     const remainingCal = Math.max(0, calGoal - totals.cal);
 
@@ -344,28 +344,46 @@ async function refreshDashboard() {
     }
 
     if (document.getElementById('statMeals')) document.getElementById('statMeals').textContent = logs.length;
-    if (document.getElementById('statStreak')) document.getElementById('statStreak').innerHTML = '<i class="fa-solid fa-fire"></i>';
+    
+    // Streak counter logic
+    calculateStreak();
 
     // Macro Grid Update
-    const remainingP = Math.max(0, proGoal - totals.p);
-    const remainingC = Math.max(0, carbGoal - totals.c);
-    const remainingF = Math.max(0, fatGoal - totals.f);
+    if (!proGoal) {
+        if (document.getElementById('proteinMainDisplay')) {
+            document.getElementById('proteinMainDisplay').innerHTML = `<span id="totalProtein">${Math.round(totals.p)}</span>g <button class="btn btn-sm btn-ghost" style="padding: 2px 5px; font-size:0.6rem; margin-left:5px" onclick="openGoalsModal()">Set Goal &rarr;</button>`;
+        }
+        updateMacroRing('proteinRing', 'proteinPctText', totals.p, 1);
+    } else {
+        if (document.getElementById('proteinMainDisplay')) {
+            document.getElementById('proteinMainDisplay').innerHTML = `<span id="totalProtein">${Math.round(totals.p)}</span> / <span id="proteinGoalLabel">${proGoal}</span>g`;
+        }
+        updateMacroRing('proteinRing', 'proteinPctText', totals.p, proGoal);
+    }
 
-    if (document.getElementById('totalProtein')) document.getElementById('totalProtein').textContent = Math.round(totals.p);
-    if (document.getElementById('proteinGoalLabel')) document.getElementById('proteinGoalLabel').textContent = proGoal;
-    if (document.getElementById('proteinRemaining')) document.getElementById('proteinRemaining').textContent = Math.round(remainingP);
+    if (!carbGoal) {
+        if (document.getElementById('carbsMainDisplay')) {
+            document.getElementById('carbsMainDisplay').innerHTML = `<span id="totalCarbs">${Math.round(totals.c)}</span>g <button class="btn btn-sm btn-ghost" style="padding: 2px 5px; font-size:0.6rem; margin-left:5px" onclick="openGoalsModal()">Set Goal &rarr;</button>`;
+        }
+        updateMacroRing('carbsRing', 'carbsPctText', totals.c, 1);
+    } else {
+        if (document.getElementById('carbsMainDisplay')) {
+            document.getElementById('carbsMainDisplay').innerHTML = `<span id="totalCarbs">${Math.round(totals.c)}</span> / <span id="carbsGoalLabel">${carbGoal}</span>g`;
+        }
+        updateMacroRing('carbsRing', 'carbsPctText', totals.c, carbGoal);
+    }
 
-    if (document.getElementById('totalCarbs')) document.getElementById('totalCarbs').textContent = Math.round(totals.c);
-    if (document.getElementById('carbsGoalLabel')) document.getElementById('carbsGoalLabel').textContent = carbGoal;
-    if (document.getElementById('carbsRemaining')) document.getElementById('carbsRemaining').textContent = Math.round(remainingC);
-
-    if (document.getElementById('totalFat')) document.getElementById('totalFat').textContent = Math.round(totals.f);
-    if (document.getElementById('fatGoalLabel')) document.getElementById('fatGoalLabel').textContent = fatGoal;
-    if (document.getElementById('fatRemaining')) document.getElementById('fatRemaining').textContent = Math.round(remainingF);
-
-    updateMacroRing('proteinRing', 'proteinPctText', totals.p, proGoal);
-    updateMacroRing('carbsRing', 'carbsPctText', totals.c, carbGoal);
-    updateMacroRing('fatRing', 'fatPctText', totals.f, fatGoal);
+    if (!fatGoal) {
+        if (document.getElementById('fatMainDisplay')) {
+            document.getElementById('fatMainDisplay').innerHTML = `<span id="totalFat">${Math.round(totals.f)}</span>g <button class="btn btn-sm btn-ghost" style="padding: 2px 5px; font-size:0.6rem; margin-left:5px" onclick="openGoalsModal()">Set Goal &rarr;</button>`;
+        }
+        updateMacroRing('fatRing', 'fatPctText', totals.f, 1);
+    } else {
+        if (document.getElementById('fatMainDisplay')) {
+            document.getElementById('fatMainDisplay').innerHTML = `<span id="totalFat">${Math.round(totals.f)}</span> / <span id="fatGoalLabel">${fatGoal}</span>g`;
+        }
+        updateMacroRing('fatRing', 'fatPctText', totals.f, fatGoal);
+    }
 
     // Dynamic Nutrients
     let tracked = [];
@@ -431,6 +449,55 @@ async function refreshDashboard() {
     } else {
         const banner = document.getElementById('dangerWindowBanner');
         if (banner) banner.style.display = 'none';
+    }
+}
+
+async function calculateStreak() {
+    const todayStrVal = trackingDate || todayStr();
+    const dObj = new Date(todayStrVal + 'T12:00:00');
+    const past = new Date(dObj);
+    past.setDate(dObj.getDate() - 90);
+    const end = todayStrVal;
+    const start = formatDate(past);
+    try {
+        const res = await authFetch(`${API}/api/user/logs-range?start=${start}&end=${end}`);
+        const data = await res.json();
+        const logs = data.logs || [];
+        
+        const datesSet = new Set();
+        logs.forEach(l => datesSet.add(l.date));
+        
+        const sortedDates = Array.from(datesSet).sort();
+        if (sortedDates.length === 0) {
+            if (document.getElementById('statStreak')) document.getElementById('statStreak').innerHTML = '—';
+            return;
+        }
+
+        let longest = 0;
+        let current = 1;
+        for (let i = 1; i < sortedDates.length; i++) {
+            const d1 = new Date(sortedDates[i-1] + 'T12:00:00');
+            const d2 = new Date(sortedDates[i] + 'T12:00:00');
+            const diffDays = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
+            if (diffDays === 1) {
+                current++;
+            } else {
+                if (current > longest) longest = current;
+                current = 1;
+            }
+        }
+        if (current > longest) longest = current;
+
+        const stEl = document.getElementById('statStreak');
+        if (stEl) {
+            if (longest > 0) {
+                stEl.innerHTML = `🔥 ${longest}`;
+            } else {
+                stEl.innerHTML = `—`;
+            }
+        }
+    } catch(e) {
+        console.error('Streak calc fail', e);
     }
 }
 
@@ -1796,6 +1863,7 @@ function applyAdvisorSuggested() {
     document.getElementById('goalCarbInput').value = carbs;
 
     toast('Applied suggested values!');
+    saveGoals();
 }
 
 // Helper to update the macro grid dynamically
@@ -2337,7 +2405,7 @@ async function fetchTopLeaderboard() {
         
         let headerHtml = `<h3 style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; font-weight: 800; text-transform: uppercase;">🏆 This Week's Campus Favorites</h3>`;
 
-        if (!items || items.length === 0 || items.every(i => i.total_servings === 0)) {
+        if (!Array.isArray(items) || items.length === 0 || items.every(i => i.total_servings === 0)) {
             topEl.innerHTML = headerHtml + `<div class="empty-state">📊 No campus data yet — be the first to log a meal!</div>`;
             return;
         }
@@ -3022,7 +3090,24 @@ function renderMirror() {
     const counterEl = document.getElementById('mirrorTwinCounter');
     if (counterEl) counterEl.textContent = `Peer Match ${currentTwinIndex + 1} of ${twins.length}`;
 
-
+    // Similarity Reason (Fix 2)
+    const reasonEl = document.getElementById('mirrorSimReason');
+    if (reasonEl) {
+        const statsToCompare = [
+            { key: 'avg_protein', label: 'protein/day', unit: 'g' },
+            { key: 'avg_carbs',   label: 'carbs/day',   unit: 'g' },
+            { key: 'avg_fat',     label: 'fat/day',     unit: 'g' }
+        ];
+        // Sort by closest match
+        statsToCompare.sort((a,b) => {
+            const diffA = Math.abs(me[a.key] - twin[a.key]);
+            const diffB = Math.abs(me[b.key] - twin[b.key]);
+            return diffA - diffB;
+        });
+        const top2 = statsToCompare.slice(0, 2);
+        const reasonStr = `You both average ${Math.round(twin[top2[0].key])}${top2[0].unit} ${top2[0].label} and have nearly identical ${top2[1].label}.`;
+        reasonEl.textContent = reasonStr;
+    }
     // Similarity banner
     const simEl  = document.getElementById('mirrorSimilarityPct');
     const simBar = document.getElementById('mirrorSimBar');
@@ -3201,7 +3286,19 @@ function renderMirrorHighlight() {
         
         highlightsEl.innerHTML = hHtml;
     } else {
-         highlightsEl.innerHTML = '<span style="font-size: 0.85rem; font-weight: 600; color:var(--text-3);">Not enough logged days to build a powerful meal highlight yet. Check back soon!</span>';
+         // Fallback Highlights (Fix 3)
+         let fallbackHtml = '';
+         for (let i = 0; i < 3; i++) {
+             fallbackHtml += `
+             <div style="margin-bottom: 12px; background: var(--surface2); padding: 16px; border-radius: var(--radius-sm); border: 1px dashed var(--border); opacity: 0.6; display: flex; align-items: center; gap: 12px;">
+                 <i class="fa-solid fa-lock" style="font-size: 1.2rem; color: var(--text-3);"></i>
+                 <div>
+                     <div style="font-size: 0.8rem; font-weight: 800; color: var(--text-3); text-transform: uppercase; margin-bottom: 4px;">Locked Highlight</div>
+                     <div style="font-size: 0.85rem; color: var(--text-2); font-weight: 600;">Log 7+ days to unlock real peer highlights.</div>
+                 </div>
+             </div>`;
+         }
+         highlightsEl.innerHTML = fallbackHtml;
     }
 }
 
@@ -3308,9 +3405,23 @@ function renderExperiments(experiments) {
     const list = document.getElementById('experimentsList');
     if (!experiments.length) {
         list.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-icon"><i class="fa-solid fa-flask"></i></div>
-                <p>You aren't running any experiments. Start one to turn yourself into a lab!</p>
+            <div class="card" style="padding: 20px; border: 2px dashed #cbd5e1; background: #f8fafc;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
+                    <div>
+                        <div class="insight-eyebrow" style="margin-bottom: 5px; color: #64748b;"><i class="fa-solid fa-flask"></i> EXAMPLE</div>
+                        <h3 style="margin: 0; font-size: 1.25rem; color: #475569;">7-Day High Protein Challenge — CONCLUDED</h3>
+                        <p style="margin: 5px 0 0; font-size: 0.85rem; color: #94a3b8;">Started a week ago • 7 Day Trial</p>
+                    </div>
+                </div>
+                <div style="background: rgba(0,0,0,0.03); border-radius: 8px; padding: 10px; color: #475569;">
+                    <div style="font-weight: bold; margin-bottom: 8px; font-size: 0.85rem; text-transform: uppercase;">Results</div>
+                    <div style="font-size: 0.9rem; line-height: 1.5;">
+                        <span style="color: var(--green); font-weight: bold;">−0.9 lbs</span> (Weight: 164.0 → 163.1 lbs)<br>
+                        Days on track: 6/7 (86%)<br>
+                        Avg hunger: 2.4 / 5<br>
+                        <div style="margin-top: 5px; font-style: italic;">"You stayed consistent. High protein reduced hunger by day 3."</div>
+                    </div>
+                </div>
             </div>
         `;
         return;
@@ -3324,12 +3435,18 @@ function renderExperiments(experiments) {
             const consistencyColor = log.consistency == 1 ? 'var(--red)' : (log.consistency == 2 ? 'var(--gold)' : 'var(--green)');
             return `
                 <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding: 8px 0; font-size: 0.85rem;">
-                    <div>
-                        <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:${consistencyColor}; margin-right:5px;"></span>
-                        <strong>${log.date}:</strong> ${log.notes || 'No notes'}
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:${consistencyColor};"></span>
+                        <div>
+                            <strong>${log.date}:</strong> ${log.notes || 'No notes'}
+                            ${log.auto_calories != null ? `<div style="font-size: 0.75rem; color: var(--text-3); margin-top: 2px;">Today's logged calories: ${log.auto_calories.toLocaleString()}</div>` : ''}
+                        </div>
                     </div>
-                    <div style="color: var(--text-2);">
-                        ${log.weight ? log.weight + ' lbs | ' : ''} Hunger: ${log.hunger_level}/5
+                    <div style="display: flex; gap: 12px; align-items: center; color: var(--text-2);">
+                         <div>${log.weight ? log.weight + ' lbs | ' : ''} Hunger: ${log.hunger_level}/5</div>
+                         <button class="btn btn-ghost" style="padding: 2px 6px; color: var(--text-3); font-size: 0.8rem;" onclick="deleteExperimentLog(${exp.id}, ${log.id})" title="Delete Log Entry">
+                            <i class="fa-solid fa-trash-can"></i>
+                         </button>
                     </div>
                 </div>
             `;
@@ -3339,20 +3456,55 @@ function renderExperiments(experiments) {
             logsHtml = `<div style="padding: 10px; color: var(--text-2); font-size: 0.9rem; font-style: italic;">No logs yet. Check in today!</div>`;
         }
 
+        let summaryHtml = '';
+        if (exp.status === 'concluded' && exp.summary) {
+            const wDelta = exp.summary.weightDelta;
+            const wColor = wDelta > 0 ? 'var(--red)' : (wDelta < 0 ? 'var(--green)' : 'var(--text)');
+            const wSign = wDelta > 0 ? '+' : '';
+            summaryHtml = `
+                <div style="margin-top: 15px; background: rgba(0,0,0,0.03); border-radius: 8px; padding: 15px;">
+                    <div style="font-weight: 800; font-size: 0.9rem; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.05em; color: var(--text-2);">Results</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; text-align: center; margin-bottom: 10px;">
+                        <div>
+                            <div style="font-size: 1.1rem; font-weight: 800; color: ${wColor};">${wSign}${wDelta} lbs</div>
+                            <div style="font-size: 0.7rem; color: var(--text-3); text-transform: uppercase;">Weight Change</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 1.1rem; font-weight: 800;">${exp.summary.daysOnTrack}/${exp.duration_days}</div>
+                            <div style="font-size: 0.7rem; color: var(--text-3); text-transform: uppercase;">Days On Track (${exp.summary.consistencyPct}%)</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 1.1rem; font-weight: 800;">${exp.summary.avgHunger} / 5</div>
+                            <div style="font-size: 0.7rem; color: var(--text-3); text-transform: uppercase;">Avg Hunger</div>
+                        </div>
+                    </div>
+                    <div style="font-style: italic; font-size: 0.85rem; color: var(--text-2); text-align: center;">
+                        "You stayed consistent. High protein reduced hunger by day 3."
+                    </div>
+                </div>
+            `;
+        }
+
         return `
             <div class="card" style="padding: 20px;">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
                     <div>
-                        <div class="insight-eyebrow" style="margin-bottom: 5px;"><i class="fa-solid fa-hourglass-half"></i> ${remaining} DAYS LEFT</div>
+                        <div class="insight-eyebrow" style="margin-bottom: 5px;"><i class="fa-solid fa-hourglass-half"></i> ${exp.status === 'concluded' ? 'CONCLUDED' : `${remaining} DAYS LEFT`}</div>
                         <h3 style="margin: 0; font-size: 1.25rem;">${exp.title}</h3>
                         <p style="margin: 5px 0 0; font-size: 0.85rem; color: var(--text-2);">Started ${exp.start_date} • ${exp.duration_days} Day Trial</p>
                     </div>
-                    <button class="btn btn-primary btn-sm" onclick="openLogExperimentModal(${exp.id})" ${remaining === 0 ? 'disabled' : ''}>${remaining === 0 ? 'Done' : 'Log Today'}</button>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        ${exp.status !== 'concluded' ? `<button class="btn btn-primary btn-sm" onclick="openLogExperimentModal(${exp.id})" ${remaining === 0 ? 'disabled' : ''}>${remaining === 0 ? 'Done' : 'Log Today'}</button>` : ''}
+                        <button class="btn btn-sm btn-ghost" style="color: var(--red); border: 1px solid rgba(239, 68, 68, 0.2);" onclick="deleteExperiment(${exp.id})" title="Delete Experiment">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
                 </div>
                 <div style="background: rgba(0,0,0,0.02); border-radius: 8px; padding: 10px;">
                     <div style="font-weight: bold; margin-bottom: 8px; font-size: 0.85rem; text-transform: uppercase;">Experiment Data</div>
                     ${logsHtml}
                 </div>
+                ${summaryHtml}
             </div>
         `;
     }).join('');
@@ -3391,5 +3543,35 @@ async function submitExperimentLog() {
         closeLogExperimentModal();
         toast('Experiment Data Logged!');
         fetchExperiments();
+    }
+}
+
+async function deleteExperiment(id) {
+    if (!confirm('Are you sure you want to delete this experiment and all its logs?')) return;
+    
+    const res = await authFetch(`${API}/api/user/experiments/${id}`, {
+        method: 'DELETE'
+    });
+    
+    if (res.ok) {
+        toast('Experiment Deleted');
+        fetchExperiments();
+    } else {
+        toast('Failed to delete experiment');
+    }
+}
+
+async function deleteExperimentLog(expId, logId) {
+    if (!confirm('Delete this log entry?')) return;
+    
+    const res = await authFetch(`${API}/api/user/experiments/${expId}/logs/${logId}`, {
+        method: 'DELETE'
+    });
+    
+    if (res.ok) {
+        toast('Log Deleted');
+        fetchExperiments();
+    } else {
+        toast('Failed to delete log');
     }
 }

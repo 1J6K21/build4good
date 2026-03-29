@@ -167,6 +167,10 @@ db.exec(`
     FOREIGN KEY(experiment_id) REFERENCES experiments(id)
   );
 `);
+
+try {
+  db.prepare("ALTER TABLE experiment_logs ADD COLUMN auto_calories INTEGER").run();
+} catch (e) { }
 try {
   db.prepare("ALTER TABLE food_items ADD COLUMN sodium INTEGER DEFAULT 0").run();
 } catch (e) { }
@@ -598,11 +602,21 @@ function getExperimentLogs(experimentId) {
   return db.prepare('SELECT * FROM experiment_logs WHERE experiment_id = ? ORDER BY date ASC').all(experimentId);
 }
 
-function addExperimentLog(experimentId, date, weight, hungerLevel, consistency, notes) {
+function addExperimentLog(experimentId, date, weight, hungerLevel, consistency, notes, autoCalories = null) {
   db.prepare(`
-    INSERT INTO experiment_logs (experiment_id, date, weight, hunger_level, consistency, notes)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(experimentId, date, weight, hungerLevel, consistency, notes);
+    INSERT INTO experiment_logs (experiment_id, date, weight, hunger_level, consistency, notes, auto_calories)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(experimentId, date, weight, hungerLevel, consistency, notes, autoCalories);
+}
+
+function deleteExperiment(experimentId, userId) {
+  db.prepare('DELETE FROM experiment_logs WHERE experiment_id = ?').run(experimentId);
+  db.prepare('DELETE FROM experiments WHERE id = ? AND user_id = ?').run(experimentId, userId);
+}
+
+function deleteExperimentLog(logId, experimentId) {
+  // experimentId check is for extra safety
+  db.prepare('DELETE FROM experiment_logs WHERE id = ? AND experiment_id = ?').run(logId, experimentId);
 }
 
 module.exports = {
@@ -644,5 +658,7 @@ module.exports = {
   createExperiment,
   updateExperimentStatus,
   getExperimentLogs,
-  addExperimentLog
+  addExperimentLog,
+  deleteExperiment,
+  deleteExperimentLog
 };

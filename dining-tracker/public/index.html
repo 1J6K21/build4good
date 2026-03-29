@@ -194,6 +194,13 @@
                         </div>
                     </div>
                 </div>
+                <div style="padding: 15px; border-top: 1px solid var(--border); background: var(--surface2); border-radius: 0 0 12px 12px;">
+                    <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-2); margin-left: 5px;">+ Add calories from outside the dining hall</div>
+                    <div style="display: flex; gap: 10px; margin-top: 12px; align-items: center; padding: 0 5px;">
+                        <input type="number" id="gapCaloriesInput" class="form-input" placeholder="0" style="width: 100px; text-align: center; font-weight: bold;">
+                        <button class="btn btn-sm btn-primary" onclick="addExternalCalories()">Add</button>
+                    </div>
+                </div>
             </div>
 
     <!-- Aggregate Modal -->
@@ -234,13 +241,9 @@
                             <div class="ring-sub">of <span id="ringGoal">2000</span></div>
                         </div>
                     </div>
-                    <div class="ring-footer">
-                        <span id="ringRemaining">2000 remaining</span>
-                    </div>
-                    
-                    <div style="padding: 15px; border-top: 1px solid rgba(0,0,0,0.05); text-align: center; display: flex; flex-direction: column; gap: 8px;">
-                        <input type="number" id="gapCaloriesInput" class="form-input" placeholder="0" style="text-align: center; padding: 6px; font-weight: bold;">
-                        <button class="btn btn-sm btn-ghost" style="border: 1px solid var(--primary); color: var(--primary); width: 100%;" onclick="addExternalCalories()">+ Add External Cals</button>
+                    <div class="ring-footer" style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                        <span id="ringRemaining" style="font-size: 0.8rem; color: var(--text-3); font-weight: 500;">2000 remaining</span>
+                        <button class="btn-link" onclick="openGoalsModal()" style="font-size: 0.75rem;">Update Goals</button>
                     </div>
                 </div>
 
@@ -248,21 +251,22 @@
                     <div class="macro-grid">
                         <div class="macro-card card">
                             <div class="macro-header">
-                                <span class="macro-icon protein">🥩</span>
-                                <span class="macro-label">Protein</span>
+                                <div>
+                                    <span class="macro-icon protein">🥩</span>
+                                    <span class="macro-label">Protein</span>
+                                </div>
                             </div>
                             <div class="macro-body">
                                 <div class="macro-info">
-                                    <div class="macro-main"><span id="totalProtein">0</span> / <span
-                                            id="proteinGoalLabel">--</span>g</div>
-                                    <div class="macro-sub">Remaining: <span id="proteinRemaining">--</span>g</div>
+                                    <div class="macro-main" id="proteinMainDisplay">
+                                        <span id="totalProtein">0</span> / <span id="proteinGoalLabel">--</span>g
+                                    </div>
+                                    <div class="macro-sub">Daily Target</div>
                                 </div>
                                 <div class="macro-ring-container">
                                     <svg viewBox="0 0 36 36" class="circular-chart primary">
-                                        <path class="circle-bg"
-                                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                                        <path class="circle" id="proteinRing" stroke-dasharray="0, 100"
-                                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                        <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                        <path class="circle" id="proteinRing" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                                         <text x="18" y="20.35" class="percentage" id="proteinPctText">0%</text>
                                     </svg>
                                 </div>
@@ -270,21 +274,22 @@
                         </div>
                         <div class="macro-card card">
                             <div class="macro-header">
-                                <span class="macro-icon carbs">🌾</span>
-                                <span class="macro-label">Carbs</span>
+                                <div>
+                                    <span class="macro-icon carbs">🌾</span>
+                                    <span class="macro-label">Carbs</span>
+                                </div>
                             </div>
                             <div class="macro-body">
                                 <div class="macro-info">
-                                    <div class="macro-main"><span id="totalCarbs">0</span> / <span
-                                            id="carbsGoalLabel">--</span>g</div>
-                                    <div class="macro-sub">Remaining: <span id="carbsRemaining">--</span>g</div>
+                                    <div class="macro-main" id="carbsMainDisplay">
+                                        <span id="totalCarbs">0</span> / <span id="carbsGoalLabel">--</span>g
+                                    </div>
+                                    <div class="macro-sub">Daily Target</div>
                                 </div>
                                 <div class="macro-ring-container">
                                     <svg viewBox="0 0 36 36" class="circular-chart amber">
-                                        <path class="circle-bg"
-                                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                                        <path class="circle" id="carbsRing" stroke-dasharray="0, 100"
-                                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                        <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                        <path class="circle" id="carbsRing" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                                         <text x="18" y="20.35" class="percentage" id="carbsPctText">0%</text>
                                     </svg>
                                 </div>
@@ -292,21 +297,22 @@
                         </div>
                         <div class="macro-card card">
                             <div class="macro-header">
-                                <span class="macro-icon fats">🥑</span>
-                                <span class="macro-label">Fats</span>
+                                <div>
+                                    <span class="macro-icon fats">🥑</span>
+                                    <span class="macro-label">Fats</span>
+                                </div>
                             </div>
                             <div class="macro-body">
                                 <div class="macro-info">
-                                    <div class="macro-main"><span id="totalFat">0</span> / <span
-                                            id="fatGoalLabel">--</span>g</div>
-                                    <div class="macro-sub">Remaining: <span id="fatRemaining">--</span>g</div>
+                                    <div class="macro-main" id="fatMainDisplay">
+                                        <span id="totalFat">0</span> / <span id="fatGoalLabel">--</span>g
+                                    </div>
+                                    <div class="macro-sub">Daily Target</div>
                                 </div>
                                 <div class="macro-ring-container">
                                     <svg viewBox="0 0 36 36" class="circular-chart green">
-                                        <path class="circle-bg"
-                                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                                        <path class="circle" id="fatRing" stroke-dasharray="0, 100"
-                                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                        <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                        <path class="circle" id="fatRing" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                                         <text x="18" y="20.35" class="percentage" id="fatPctText">0%</text>
                                     </svg>
                                 </div>
@@ -799,7 +805,7 @@
             <div class="mirror-hero">
                 <div class="mirror-eyebrow"><i class="fa-solid fa-mirror"></i> BEHAVIOR MIRRORING</div>
                 <h1 class="mirror-title">Your Dining Hall Twin</h1>
-                <p class="mirror-subtitle">We found someone at your school who eats almost exactly like you. Here's what their habits can tell you about yours.</p>
+                <p class="mirror-subtitle">We found a student at your school with nearly identical eating patterns. Here's what their habits can teach yours.</p>
                 <div class="mirror-period-row">
                     <span class="mirror-period-label">Compare last</span>
                     <select id="mirrorDays" class="goal-edit-btn" onchange="fetchMirror()">
@@ -832,6 +838,7 @@
                     <div class="msb-inner">
                         <div class="msb-pct" id="mirrorSimilarityPct">98%</div>
                         <div class="msb-label">Dietary Similarity Score</div>
+                        <div class="msb-reason" id="mirrorSimReason"></div>
                         <div class="msb-bar-track"><div class="msb-bar-fill" id="mirrorSimBar" style="width:0%"></div></div>
                     </div>
                 </div>
@@ -857,7 +864,7 @@
 
                         <!-- Center label -->
                         <div class="mirror-center-col">
-                            <div class="mirror-vs-badge">VS</div>
+                            <div class="mirror-vs-badge"><i class="fa-solid fa-equals"></i></div>
                             <div class="mirror-stat-label-col" id="mirrorStatLabels">
                                 <!-- stat labels injected by JS -->
                             </div>
@@ -865,7 +872,7 @@
 
                         <!-- TWIN -->
                         <div class="mirror-player twin">
-                            <div class="mirror-player-badge twin-badge">TWIN</div>
+                            <div class="mirror-player-badge twin-badge">PEER</div>
                             <img id="mirrorTwinPic" src="" alt="Twin" class="mirror-avatar" />
                             <div class="mirror-player-name" id="mirrorTwinName">Twin</div>
                             <div class="mirror-player-logs" id="mirrorTwinLogs">— logs</div>
@@ -889,8 +896,8 @@
 
                     <!-- Peer Highlights -->
                     <div class="card mirror-connect-card">
-                        <div class="insight-eyebrow"><i class="fa-solid fa-star"></i> PEER HIGHLIGHTS</div>
-                        <h3 style="margin: 8px 0 10px; font-weight: 900; font-size: 1.1rem;">On Your Level</h3>
+                        <div class="insight-eyebrow"><i class="fa-solid fa-star"></i> STEAL THEIR STRATEGY</div>
+                        <h3 style="margin: 8px 0 10px; font-weight: 900; font-size: 1.1rem;">Game Plans That Worked</h3>
                         <p style="font-size: 0.85rem; color: var(--text-2); line-height: 1.5; margin-bottom: 16px;">
                             This is a real student making the most of the same dining halls. They aren't perfect, but here's a standout day where they made it work to help inspire your own game plan.
                         </p>
@@ -955,6 +962,14 @@
                 <button class="btn-close" onclick="closeNewExperimentModal()">×</button>
             </div>
             <div class="modal-body">
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label style="font-size: 0.85rem; font-weight: bold; color: var(--text-2); text-transform: uppercase;">Start from a Template</label>
+                    <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 12px;">
+                        <button class="btn btn-primary" style="text-align: left; justify-content: flex-start; font-size: 0.85rem; padding: 12px 16px; width: 100%; border-radius: 12px;" onclick="document.getElementById('expTitle').value = '💪 High Protein Week — Hit 150g protein daily for 7 days'; document.getElementById('expDuration').value = '7';">💪 High Protein Week — Hit 150g protein daily for 7 days</button>
+                        <button class="btn btn-primary" style="text-align: left; justify-content: flex-start; font-size: 0.85rem; padding: 12px 16px; width: 100%; border-radius: 12px;" onclick="document.getElementById('expTitle').value = '🚫 No Dessert Challenge — Skip the dessert station for 5 days'; document.getElementById('expDuration').value = '5';">🚫 No Dessert Challenge — Skip the dessert station for 5 days</button>
+                        <button class="btn btn-primary" style="text-align: left; justify-content: flex-start; font-size: 0.85rem; padding: 12px 16px; width: 100%; border-radius: 12px;" onclick="document.getElementById('expTitle').value = '🥗 Salad Starter — Begin every lunch with a salad for 7 days'; document.getElementById('expDuration').value = '7';">🥗 Salad Starter — Begin every lunch with a salad for 7 days</button>
+                    </div>
+                </div>
                 <div class="form-group">
                     <label>Experiment Hypothesis / Rule</label>
                     <input type="text" id="expTitle" class="form-input" placeholder="e.g. Avoid desserts, 150g protein/day...">

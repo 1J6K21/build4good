@@ -3308,13 +3308,21 @@ body {
     padding-top: 16px;
 }
 
-.split-label {
-    font-size: 0.62rem;
-    font-weight: 900;
+.split.msb-label {
+    font-size: 0.75rem;
+    font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-3);
-    margin-bottom: 10px;
+    margin-bottom: 4px;
+}
+
+.msb-reason {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-2);
+    margin-bottom: 12px;
+    opacity: 0.9;
 }
 
 .split-bar-row {
@@ -3719,7 +3727,17 @@ body {
     text-transform: uppercase;
     letter-spacing: 0.1em;
     opacity: 0.7;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
+}
+
+.msb-reason {
+    font-size: 0.85rem;
+    font-weight: 500;
+    opacity: 1; /* full opacity for better visibility */
+    color: rgba(255, 255, 255, 0.95); /* make white against dark blue */
+    margin-bottom: 12px;
+    max-width: 380px;
+    line-height: 1.4;
 }
 
 .msb-bar-track {
@@ -3770,7 +3788,7 @@ body {
 }
 
 .you-badge  { background: var(--primary); color: white; }
-.twin-badge { background: var(--accent);  color: white; }
+.twin-badge { background: var(--accent); color: white; border: 1px solid rgba(255,255,255,0.2); }
 
 .mirror-avatar {
     width: 72px;
@@ -3807,8 +3825,9 @@ body {
 .mirror-vs-badge {
     font-size: 1.4rem;
     font-weight: 900;
-    color: var(--border);
+    color: var(--text-3); /* darker gray for better visibility on white */
     letter-spacing: 0.1em;
+    opacity: 0.8;
 }
 
 /* Stat rows */

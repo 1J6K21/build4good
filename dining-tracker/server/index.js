@@ -11,8 +11,9 @@ const {
     cleanupMenus, getShortcuts, saveShortcut, updateMacroGoals,
     updateUserStats, updateTrackedNutrients, updateUserNutrients, updateUserGoals,
     addWaitTime, getWaitTimeStats, getWaitTimeStatsAll, clearStaleJobs,
-    getLeaderboard, getTopItems, findDiningTwin, getExperiments, createExperiment,
-    updateExperimentStatus, getExperimentLogs, addExperimentLog
+    updateExperimentStatus, getExperimentLogs, addExperimentLog, deleteExperiment,
+    deleteExperimentLog, getExperiments, createExperiment,
+    getLeaderboard, getTopItems, findDiningTwin
 } = require('./db');
 
 // Run DB cleanup on startup
@@ -263,8 +264,40 @@ app.post('/api/locations/:slug/wait-time', authenticateToken, async (req, res) =
 // Experiments API
 app.get('/api/user/experiments', authenticateToken, async (req, res) => {
     const experiments = getExperiments(req.user.id);
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
     for (let exp of experiments) {
         exp.logs = getExperimentLogs(exp.id);
+        const start = new Date(exp.start_date);
+        const end = new Date(start.getTime() + exp.duration_days * 24 * 60 * 60 * 1000);
+        if (exp.status === 'concluded' || end <= today) {
+            if (exp.status !== 'concluded') {
+                updateExperimentStatus(exp.id, req.user.id, 'concluded');
+                exp.status = 'concluded';
+            }
+            if (exp.logs.length > 0) {
+                const logsWithWeight = exp.logs.filter(l => l.weight != null);
+                const firstWeight = logsWithWeight.length > 0 ? logsWithWeight[0].weight : null;
+                const lastWeight = logsWithWeight.length > 0 ? logsWithWeight[logsWithWeight.length - 1].weight : null;
+                const weightDelta = (lastWeight !== null && firstWeight !== null) ? parseFloat((lastWeight - firstWeight).toFixed(1)) : 0;
+                
+                const validHunger = exp.logs.filter(l => l.hunger_level != null);
+                const avgHunger = validHunger.length > 0 ? parseFloat((validHunger.reduce((sum, l) => sum + l.hunger_level, 0) / validHunger.length).toFixed(1)) : 0;
+                
+                const daysOnTrack = exp.logs.filter(l => l.consistency == 3).length;
+                const consistencyPct = exp.duration_days ? Math.round((daysOnTrack / exp.duration_days) * 100) : 0;
+                
+                exp.summary = {
+                    weightDelta,
+                    avgHunger,
+                    daysOnTrack,
+                    consistencyPct
+                };
+            } else {
+                exp.summary = { weightDelta: 0, avgHunger: 0, daysOnTrack: 0, consistencyPct: 0 };
+            }
+        }
     }
     res.json({ experiments });
 });
@@ -283,9 +316,40 @@ app.post('/api/user/experiments/:id/status', authenticateToken, async (req, res)
 
 app.post('/api/user/experiments/:id/logs', authenticateToken, async (req, res) => {
     const { date, weight, hungerLevel, consistency, notes } = req.body;
-    addExperimentLog(req.params.id, date, weight, hungerLevel, consistency, notes);
+    const logs = getMealLogs(req.user.id, date); // synchronous in your db layer
+    let autoCalories = null;
+    if (logs && logs.length > 0) {
+        autoCalories = logs.reduce((sum, l) => sum + (l.calories || 0), 0);
+    }
+    addExperimentLog(req.params.id, date, weight, hungerLevel, consistency, notes, autoCalories);
     res.json({ success: true });
 });
+
+app.delete('/api/user/experiments/:id', authenticateToken, async (req, res) => {
+    try {
+        console.log(`[API] Deleting experiment ${req.params.id} for user ${req.user.id}`);
+        await deleteExperiment(req.params.id, req.user.id);
+        res.json({ success: true });
+    } catch (e) {
+        console.error('[API] Error deleting experiment:', e);
+        res.status(500).json({ error: 'Failed to delete experiment' });
+    }
+});
+
+app.delete('/api/user/experiments/:id/logs/:logId', authenticateToken, async (req, res) => {
+    try {
+        // verify experiment belongs to user
+        const exps = getExperiments(req.user.id);
+        if (!exps.find(e => e.id == req.params.id)) return res.status(403).json({ error: 'Unauthorized' });
+        
+        deleteExperimentLog(req.params.logId, req.params.id);
+        res.json({ success: true });
+    } catch (e) {
+        console.error('[API] Error deleting log:', e);
+        res.status(500).json({ error: 'Failed to delete log' });
+    }
+});
+
 
 // Existing Menu Data Routes
 app.get('/api/locations', async (req, res) => {
