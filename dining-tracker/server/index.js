@@ -6,9 +6,11 @@ const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 const {
     getUser, upsertUser, updateCalorieGoal,
-    addMealLog, getMealLogs, deleteMealLog,
+    addMealLog, getMealLogs, getMealLogsRange, deleteMealLog,
     getMenu, createScrapeJob, getScrapeJob, getAllLocations,
-    cleanupMenus
+    cleanupMenus, getShortcuts, saveShortcut, updateMacroGoals,
+    updateUserStats, updateTrackedNutrients, updateUserNutrients, updateUserGoals,
+    addWaitTime, getWaitTimeStats, getWaitTimeStatsAll
 } = require('./db');
 
 // Run DB cleanup on startup
@@ -25,13 +27,12 @@ const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key';
 
 // ── DEBUG LOGGER ───────────────────────────────────
+const logFile = path.join(__dirname, '../server.log');
 app.use((req, res, next) => {
-    const logStr = `[${new Date().toISOString()}] ${req.method} ${req.url} | Origin: ${req.get('origin') || 'none'} | Referer: ${req.get('referer') || 'none'}\n`;
+    const logStr = `[${new Date().toISOString()}] ${req.method} ${req.url} | User: ${req.user ? req.user.id : 'anon'}\n`;
     try {
-        fs.appendFileSync(path.join(__dirname, '../../helper/api_debug.log'), logStr);
-    } catch (e) {
-        console.error('Logging failed', e);
-    }
+        fs.appendFileSync(logFile, logStr);
+    } catch (e) { }
     next();
 });
 
@@ -44,6 +45,12 @@ function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
     if (!token) return res.status(200).json({ authenticated: false });
+
+    // ── DEV BYPASS ────────────────────────────────────
+    if (token === 'dev-test-token') {
+        req.user = { id: 'test-user-id', email: 'test@example.com', name: 'Test User' };
+        return next();
+    }
 
     jwt.verify(token, JWT_SECRET, async (err, decoded) => {
         if (err) {
@@ -89,8 +96,10 @@ app.post('/api/auth/google', async (req, res) => {
     }
 });
 
-app.get('/api/auth/me', authenticateToken, (req, res) => {
-    res.json({ authenticated: true, user: req.user });
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
+    const user = await getUser(req.user.id);
+    if (!user) return res.status(200).json({ authenticated: false });
+    res.json({ authenticated: true, user });
 });
 
 app.post('/api/auth/logout', (req, res) => {
@@ -99,15 +108,55 @@ app.post('/api/auth/logout', (req, res) => {
 });
 
 // User Data Routes
+app.get('/api/user/logs-range', authenticateToken, async (req, res) => {
+    const { start, end } = req.query;
+    if (!start || !end) return res.status(400).json({ error: 'Start and end dates required' });
+    const logs = await getMealLogsRange(req.user.id, start, end);
+    res.json({ logs });
+});
+
 app.get('/api/user/logs', authenticateToken, async (req, res) => {
-    const date = req.query.date || new Date().toISOString().split('T')[0];
+    const today = new Date();
+    const localToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const date = req.query.date || localToday;
     const logs = await getMealLogs(req.user.id, date);
     res.json({ logs });
 });
 
+// ── Removed Duplicate /api/user/logs-range Definition ──
+
 app.post('/api/user/logs', authenticateToken, async (req, res) => {
     const { date, mealType, item } = req.body;
-    await addMealLog(req.user.id, date, mealType, item.name, item.calories, item.portion, item.protein, item.fat, item.carbs);
+    await addMealLog(
+        req.user.id, date, mealType, item.name, item.calories, item.portion,
+        item.protein, item.fat, item.carbs, item.sodium,
+        item.fiber, item.sugars, item.saturated_fat, item.trans_fat, item.cholesterol
+    );
+    res.json({ success: true });
+});
+
+app.get('/api/user/shortcuts', authenticateToken, async (req, res) => {
+    const shortcuts = await getShortcuts(req.user.id);
+    res.json({ shortcuts: shortcuts.map(s => ({ ...s, items: JSON.parse(s.item_json) })) });
+});
+
+app.post('/api/user/shortcuts', authenticateToken, async (req, res) => {
+    const { name, items } = req.body;
+    await saveShortcut(req.user.id, name, items);
+    res.json({ success: true });
+});
+
+app.post('/api/user/goals', authenticateToken, async (req, res) => {
+    const { calorieGoal, proteinGoal, fatGoal, carbGoal, height, weight } = req.body;
+    if (calorieGoal) await updateCalorieGoal(req.user.id, parseInt(calorieGoal));
+    await updateUserGoals(req.user.id, parseInt(proteinGoal), parseInt(fatGoal), parseInt(carbGoal));
+    if (height || weight) await updateUserStats(req.user.id, height ? parseInt(height) : null, weight ? parseInt(weight) : null);
+    res.json({ success: true });
+});
+
+app.post('/api/user/nutrients', authenticateToken, async (req, res) => {
+    const { nutrients } = req.body;
+    await updateTrackedNutrients(req.user.id, nutrients);
     res.json({ success: true });
 });
 
@@ -122,6 +171,19 @@ app.post('/api/user/goal', authenticateToken, async (req, res) => {
     res.json({ success: true });
 });
 
+// Wait Times API (Shared)
+app.get('/api/locations/:slug/wait-time', async (req, res) => {
+    const stats = await getWaitTimeStatsAll(req.params.slug);
+    res.json(stats);
+});
+
+app.post('/api/locations/:slug/wait-time', authenticateToken, async (req, res) => {
+    const { seconds, stationName } = req.body;
+    await addWaitTime(req.user.id, req.params.slug, stationName, seconds);
+    const stats = await getWaitTimeStatsAll(req.params.slug);
+    res.json({ success: true, stats });
+});
+
 // Existing Menu Data Routes
 app.get('/api/locations', async (req, res) => {
     const locations = await getAllLocations();
@@ -134,13 +196,13 @@ app.get('/api/locations', async (req, res) => {
 });
 
 app.get('/api/menu', async (req, res) => {
-    const { locationSlug, periodSlug, date } = req.query;
-    console.log(`[API] Menu request: ${locationSlug} | ${periodSlug} | ${date}`);
+    const { locationSlug, periodSlug, date, refresh } = req.query;
+    console.log(`[API] Menu request: ${locationSlug} | ${periodSlug} | ${date} (refresh: ${refresh})`);
 
     if (!locationSlug || !periodSlug || !date) return res.status(400).json({ error: 'Missing params' });
 
     const cached = await getMenu(locationSlug, periodSlug, date);
-    if (cached) {
+    if (cached && refresh !== 'true') {
         console.log(`[API] Cache HIT for ${locationSlug}`);
         return res.json({ status: 'ready', stations: cached.stations });
     }
@@ -187,8 +249,8 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
-// Catch-all
-app.get('/{*splat}', (req, res) => {
+// Catch-all for SPA (must be last)
+app.use((req, res) => {
     res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 

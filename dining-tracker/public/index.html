@@ -12,6 +12,8 @@
         rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- Simple HeroIcons via CDN for consistent look -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
     <link rel="stylesheet" href="style.css" />
 </head>
 
@@ -19,7 +21,7 @@
     <div id="page-login" class="page">
         <div class="auth-card">
             <div class="auth-logo">
-                <span class="auth-logo-icon">🍽️</span>
+                <i class="fa-solid fa-utensils"></i>
             </div>
             <h1 class="auth-title">Aggie Dining</h1>
             <p class="auth-subtitle">Track your macros across every TAMU dining hall with one click.</p>
@@ -33,7 +35,7 @@
     <nav class="navbar" style="display:none">
         <div class="nav-inner">
             <a class="nav-logo" href="#" onclick="showPage('dashboard')">
-                <span class="logo-icon">🍽️</span>
+                <i class="fa-solid fa-utensils"></i>
                 <span class="logo-text">Aggie Dining</span>
             </a>
             <div class="nav-links">
@@ -47,7 +49,12 @@
                             <span id="userEmail">email@tamu.edu</span>
                         </div>
                         <hr />
-                        <button onclick="logout()">Sign Out</button>
+                        <li><button class="dropdown-item" onclick="openGoalsModal()">
+                                <i class="fa-solid fa-gear"></i> Macro Goals
+                            </button></li>
+                        <li><button class="dropdown-item" onclick="clearToken(); location.reload();">
+                                <i class="fa-solid fa-right-from-bracket"></i> Logout
+                            </button></li>
                     </div>
                 </div>
             </div>
@@ -71,90 +78,226 @@
                     </div>
                     <div class="ring-footer">
                         <span id="ringRemaining">2000 remaining</span>
-                        <button class="goal-edit-btn" onclick="openGoalModal()">Edit Goal</button>
                     </div>
                 </div>
 
                 <div class="stats-col">
-                    <div class="stat-card card macro-summary-card">
-                        <div class="macro-items">
-                            <div class="macro-item">
-                                <div class="macro-val" id="macroProtein">0g</div>
-                                <div class="macro-lbl">Protein</div>
+                    <div class="macro-grid">
+                        <div class="macro-card card">
+                            <div class="macro-header">
+                                <span class="macro-icon protein">🥩</span>
+                                <span class="macro-label">Protein</span>
                             </div>
-                            <div class="macro-item">
-                                <div class="macro-val" id="macroFat">0g</div>
-                                <div class="macro-lbl">Fat</div>
+                            <div class="macro-body">
+                                <div class="macro-info">
+                                    <div class="macro-main"><span id="totalProtein">0</span> / <span
+                                            id="proteinGoalLabel">--</span>g</div>
+                                    <div class="macro-sub">Remaining: <span id="proteinRemaining">--</span>g</div>
+                                </div>
+                                <div class="macro-ring-container">
+                                    <svg viewBox="0 0 36 36" class="circular-chart maroon">
+                                        <path class="circle-bg"
+                                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                        <path class="circle" id="proteinRing" stroke-dasharray="0, 100"
+                                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                        <text x="18" y="20.35" class="percentage" id="proteinPctText">0%</text>
+                                    </svg>
+                                </div>
                             </div>
-                            <div class="macro-item">
-                                <div class="macro-val" id="macroCarbs">0g</div>
-                                <div class="macro-lbl">Carbs</div>
+                        </div>
+                        <div class="macro-card card">
+                            <div class="macro-header">
+                                <span class="macro-icon carbs">🌾</span>
+                                <span class="macro-label">Carbs</span>
+                            </div>
+                            <div class="macro-body">
+                                <div class="macro-info">
+                                    <div class="macro-main"><span id="totalCarbs">0</span> / <span
+                                            id="carbsGoalLabel">--</span>g</div>
+                                    <div class="macro-sub">Remaining: <span id="carbsRemaining">--</span>g</div>
+                                </div>
+                                <div class="macro-ring-container">
+                                    <svg viewBox="0 0 36 36" class="circular-chart amber">
+                                        <path class="circle-bg"
+                                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                        <path class="circle" id="carbsRing" stroke-dasharray="0, 100"
+                                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                        <text x="18" y="20.35" class="percentage" id="carbsPctText">0%</text>
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="macro-card card">
+                            <div class="macro-header">
+                                <span class="macro-icon fats">🥑</span>
+                                <span class="macro-label">Fats</span>
+                            </div>
+                            <div class="macro-body">
+                                <div class="macro-info">
+                                    <div class="macro-main"><span id="totalFat">0</span> / <span
+                                            id="fatGoalLabel">--</span>g</div>
+                                    <div class="macro-sub">Remaining: <span id="fatRemaining">--</span>g</div>
+                                </div>
+                                <div class="macro-ring-container">
+                                    <svg viewBox="0 0 36 36" class="circular-chart green">
+                                        <path class="circle-bg"
+                                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                        <path class="circle" id="fatRing" stroke-dasharray="0, 100"
+                                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                        <text x="18" y="20.35" class="percentage" id="fatPctText">0%</text>
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="macro-card card add-tracker-card" onclick="openAddTrackerModal()">
+                            <div class="add-tracker-inner">
+                                <div class="add-icon">+</div>
+                                <div class="add-label">Tap to track something else</div>
                             </div>
                         </div>
                     </div>
-                    <div class="stat-card card">
-                        <div class="stat-icon">🔥</div>
-                        <div class="stat-val" id="statMeals">0</div>
-                        <div class="stat-lbl">Meals Logged</div>
+                    <button class="goal-edit-btn" onclick="openGoalsModal()"
+                        style="margin-top: 1.5rem; width: 100%; padding: 12px; font-size: 0.8rem;">
+                        <i class="fa-solid fa-gear"></i> ADJUST MACRO GOALS
+                    </button>
+                </div>
+
+                <div class="stat-card card">
+                    <div class="stat-icon"><i class="fa-solid fa-fire"></i></div>
+                    <div class="stat-val" id="statMeals">0</div>
+                    <div class="stat-lbl">Meals Logged</div>
+                </div>
+                <div class="stat-card card">
+                    <div class="stat-icon"><i class="fa-solid fa-calendar-day"></i></div>
+                    <div class="stat-val" id="statStreak">0</div>
+                    <div class="stat-lbl">Day Streak</div>
+                </div>
+
+            </div> <!-- End Hero -->
+            
+            <!-- Full Width Analytics Section -->
+            <div class="dash-row-full">
+                <!-- Dynamic Trend Analytics -->
+                <div class="card analytics-card">
+                    <div class="card-header">
+                        <h2 id="trendTitle">Trend Analysis</h2>
+                        <div class="trend-controls">
+                            <select id="trendMetric" onchange="updateTrendChart()" class="goal-edit-btn">
+                                <option value="calories">CALORIES</option>
+                                <option value="protein">PROTEIN</option>
+                                <option value="carbs">CARBS</option>
+                                <option value="fat">FATS</option>
+                                <option value="sodium">SODIUM</option>
+                                <option value="fiber">FIBER</option>
+                                <option value="sugars">SUGAR</option>
+                                <option value="saturated_fat">SAT. FAT</option>
+                                <option value="trans_fat">TRANS FAT</option>
+                                <option value="cholesterol">CHOLESTEROL</option>
+                            </select>
+                            <select id="trendDuration" onchange="updateTrendChart()" class="goal-edit-btn">
+                                <option value="7">7 DAYS</option>
+                                <option value="30">30 DAYS</option>
+                                <option value="90">3 MONTHS</option>
+                                <option value="180">6 MONTHS</option>
+                                <option value="365">1 YEAR</option>
+                            </select>
+                        </div>
                     </div>
-                    <div class="stat-card card">
-                        <div class="stat-icon">📅</div>
-                        <div class="stat-val" id="statStreak">0</div>
-                        <div class="stat-lbl">Day Streak</div>
+                    <div class="chart-container">
+                        <div id="trendEmpty" class="chart-empty-overlay" style="display: none;">
+                            <div class="empty-icon"><i class="fa-solid fa-chart-line"></i></div>
+                            <p>No data for this period.</p>
+                            <small>Log a meal to see your trend!</small>
+                        </div>
+                        <canvas id="trendChart"></canvas>
                     </div>
-                    <div class="stat-card card">
-                        <div class="stat-icon">⚡</div>
-                        <div class="stat-val" id="statAvg">0</div>
-                        <div class="stat-lbl">7-Day Avg</div>
+                </div>
+
+                <!-- Weight Accountability Widget -->
+                <div class="card analytics-card accountability-card">
+                    <div class="card-header">
+                        <div>
+                            <h2 style="margin:0">Weight Projection</h2>
+                            <p class="card-hint">How your habits impact your future.</p>
+                        </div>
+                        <button class="btn-link" onclick="openGoalsModal()">Update Goals</button>
+                    </div>
+                    <div class="accountability-body">
+                        <div id="weightResult">-- lbs</div>
+                        <div id="weightDelta">Based on your habits</div>
+                        <div id="projectionStats"></div>
+                    </div>
+                    <div class="accountability-controls">
+                        <div class="form-group">
+                            <label>Habits From</label>
+                            <select id="habitPeriod" onchange="updateWeightProjection()" class="goal-edit-btn">
+                                <option value="today">Today</option>
+                                <option value="week">This Week</option>
+                                <option value="2weeks" selected>Last 2 Weeks</option>
+                                <option value="month">This Month</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Project For</label>
+                            <select id="projectionPeriod" onchange="updateWeightProjection()" class="goal-edit-btn">
+                                <option value="7">1 Week</option>
+                                <option value="14">2 Weeks</option>
+                                <option value="30">1 Month</option>
+                                <option value="90">3 Months</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Weekly Overview -->
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h2>Weekly Overview</h2>
+                        <span class="card-hint">Calories per day</span>
+                    </div>
+                    <div class="chart-wrap">
+                        <div id="weekEmpty" class="chart-empty-overlay" style="display: none;">
+                            <p>No data this week</p>
+                        </div>
+                        <canvas id="weekChart"></canvas>
                     </div>
                 </div>
             </div>
 
-            <!-- Weekly chart -->
-            <div class="card chart-card">
+        <!-- Today's log + shortcuts row -->
+        <div class="bottom-row">
+
+            <!-- Today's meals -->
+            <div class="card meals-card">
                 <div class="card-header">
-                    <h2>Weekly Overview</h2>
-                    <span class="card-hint">Calories per day</span>
+                    <h2>Today's Meals</h2>
+                    <span class="card-date" id="todayDateLabel"></span>
                 </div>
-                <div class="chart-wrap">
-                    <canvas id="weekChart"></canvas>
-                </div>
-            </div>
-
-            <!-- Today's log + shortcuts row -->
-            <div class="bottom-row">
-
-                <!-- Today's meals -->
-                <div class="card meals-card">
-                    <div class="card-header">
-                        <h2>Today's Meals</h2>
-                        <span class="card-date" id="todayDateLabel"></span>
-                    </div>
-                    <div id="todayMealsList" class="meals-list">
-                        <div class="empty-state">
-                            <div class="empty-icon">🥗</div>
-                            <p>No meals logged today.</p>
-                            <button class="btn btn-primary" onclick="showPage('menu')">Browse Menu</button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Shortcuts -->
-                <div class="card shortcuts-card">
-                    <div class="card-header">
-                        <h2>⚡ Quick Log</h2>
-                        <span class="card-hint">Saved combos</span>
-                    </div>
-                    <div id="shortcutsList" class="shortcuts-list">
-                        <div class="empty-state">
-                            <div class="empty-icon">💾</div>
-                            <p>Save a meal combo as a shortcut for fast logging.</p>
-                        </div>
+                <div id="todayMealsList" class="meals-list">
+                    <div class="empty-state">
+                        <div class="empty-icon">🥗</div>
+                        <p>No meals logged today.</p>
+                        <button class="btn btn-primary" onclick="showPage('menu')">Browse Menu</button>
                     </div>
                 </div>
             </div>
 
+            <!-- Shortcuts -->
+            <div class="card shortcuts-card">
+                <div class="card-header">
+                    <h2>⚡ Quick Log</h2>
+                    <span class="card-hint">Saved combos</span>
+                </div>
+                <div id="shortcutsList" class="shortcuts-list">
+                    <div class="empty-state">
+                        <div class="empty-icon"><i class="fa-solid fa-bookmark"></i></div>
+                        <p>Save a meal combo as a shortcut for fast logging.</p>
+                    </div>
+                </div>
+            </div>
         </div>
+
+    </div>
     </div>
 
     <!-- ======================= MENU PAGE ======================= -->
@@ -164,13 +307,13 @@
             <!-- Filter bar -->
             <div class="filter-bar card">
                 <div class="filter-group">
-                    <label class="filter-label">📍 Location</label>
+                    <label class="filter-label"><i class="fa-solid fa-location-dot"></i> Location</label>
                     <select id="locationSelect" class="filter-select" onchange="onFilterChange()">
                         <option value="">Loading...</option>
                     </select>
                 </div>
                 <div class="filter-group">
-                    <label class="filter-label">🕐 Meal Period</label>
+                    <label class="filter-label"><i class="fa-solid fa-clock"></i> Meal Period</label>
                     <div class="period-pills" id="periodPills">
                         <button class="period-pill" data-period="breakfast" data-period-id="69c728901eb93fe151791f30"
                             onclick="selectPeriod(this)">Breakfast</button>
@@ -183,7 +326,7 @@
                     </div>
                 </div>
                 <div class="filter-group">
-                    <label class="filter-label">📅 Date</label>
+                    <label class="filter-label"><i class="fa-solid fa-calendar-days"></i> Date</label>
                     <input type="date" id="dateInput" class="filter-date" onchange="onFilterChange()" />
                 </div>
 
@@ -217,9 +360,119 @@
 
     <!-- ======================= MODALS ======================= -->
 
+    <!-- Macro Goals Modal -->
+    <div id="goalsModalBackdrop" class="modal-backdrop" onclick="closeGoalsModal()">
+        <div class="modal card glass" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2>Set Daily Goals</h2>
+                <button class="btn-close" onclick="closeGoalsModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Daily Calorie Goal</label>
+                    <input type="number" id="goalCaloriesInput" class="filter-date" placeholder="2000" />
+                </div>
+                <div class="macro-goal-grid"
+                    style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 15px;">
+                    <div class="form-group">
+                        <label>Protein (g)</label>
+                        <input type="number" id="goalProteinInput" class="filter-date" placeholder="100" />
+                    </div>
+                    <div class="form-group">
+                        <label>Fats (g)</label>
+                        <input type="number" id="goalFatInput" class="filter-date" placeholder="70" />
+                    </div>
+                    <div class="form-group">
+                        <label>Carbs (g)</label>
+                        <input type="number" id="goalCarbInput" class="filter-date" placeholder="250" />
+                    </div>
+                </div>
+
+                <div class="smart-advisor" style="margin-top: 25px; padding-top: 20px; border-top: 1px dashed #ddd;">
+                    <h3
+                        style="font-size: 0.95rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; color: var(--maroon);">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> Smart Advisor
+                    </h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div class="form-group">
+                            <label>Height (in)</label>
+                            <input type="number" id="userHeight" class="filter-date" placeholder="70"
+                                oninput="calculateAdvisorSuggested()" />
+                        </div>
+                        <div class="form-group">
+                            <label>Weight (lbs)</label>
+                            <input type="number" id="userWeight" class="filter-date" placeholder="180"
+                                oninput="calculateAdvisorSuggested()" />
+                        </div>
+                    </div>
+                    <div id="advisorSuggestion"
+                        style="margin-top: 15px; background: var(--maroon-dim); padding: 12px; border-radius: 12px; font-size: 0.82rem; line-height: 1.4; color: var(--maroon); border: 1px solid rgba(80,0,0,0.1);">
+                        Enter your metrics above to see suggested goals based on average activity levels.
+                    </div>
+                    <button class="btn btn-ghost"
+                        style="width: 100%; margin-top: 10px; font-size: 0.8rem; border-color: rgba(80,0,0,0.2);"
+                        onclick="applyAdvisorSuggested()">Apply Suggestions</button>
+                </div>
+
+                <p class="form-hint" style="margin-top: 20px;">Adjusting these will update your dashboard progress bars.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeGoalsModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveGoals()">Save Goals</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Tracker Modal -->
+    <div id="addTrackerModal" class="modal-backdrop" onclick="closeAddTrackerModal()">
+        <div class="modal card glass" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2>Add Tracker</h2>
+                <button class="btn-close" onclick="closeAddTrackerModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p class="form-hint" style="margin-bottom: 20px;">Select another metric you'd like to track on your
+                    dashboard.</p>
+                <div class="tracker-options-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <button class="tracker-option-btn" onclick="addMetricToDashboard('sodium')">
+                        <span class="option-icon">🧂</span>
+                        <div class="option-info">
+                            <span class="option-label">Sodium</span>
+                            <span class="option-desc">Track salt intake</span>
+                        </div>
+                    </button>
+                    <button class="tracker-option-btn" onclick="addMetricToDashboard('fiber')">
+                        <span class="option-icon">🥦</span>
+                        <div class="option-info">
+                            <span class="option-label">Fiber</span>
+                            <span class="option-desc">Digestive health</span>
+                        </div>
+                    </button>
+                    <button class="tracker-option-btn" onclick="addMetricToDashboard('sugar')">
+                        <span class="option-icon">🍭</span>
+                        <div class="option-info">
+                            <span class="option-label">Sugar</span>
+                            <span class="option-desc">Control sweetness</span>
+                        </div>
+                    </button>
+                    <button class="tracker-option-btn" onclick="addMetricToDashboard('water')">
+                        <span class="option-icon">💧</span>
+                        <div class="option-info">
+                            <span class="option-label">Water</span>
+                            <span class="option-desc">Stay hydrated</span>
+                        </div>
+                    </button>
+                </div>
+                <p class="form-hint" style="margin-top: 20px;">Note: These will be available in the next update. Select
+                    one to see it on your grid.</p>
+            </div>
+        </div>
+    </div>
+
     <!-- Log Meal Modal -->
     <div class="modal-backdrop" id="logModalBackdrop" onclick="closeLogModal()">
-        <div class="modal" onclick="e=>e.stopPropagation()">
+        <div class="modal" onclick="event.stopPropagation()">
             <div class="modal-header">
                 <h3>Log This Meal</h3>
                 <button class="modal-close" onclick="closeLogModal()">✕</button>
@@ -249,7 +502,7 @@
 
     <!-- Goal Modal -->
     <div class="modal-backdrop" id="goalModalBackdrop" onclick="closeGoalModal()">
-        <div class="modal modal-sm" onclick="e=>e.stopPropagation()">
+        <div class="modal modal-sm" onclick="event.stopPropagation()">
             <div class="modal-header">
                 <h3>Daily Calorie Goal</h3>
                 <button class="modal-close" onclick="closeGoalModal()">✕</button>

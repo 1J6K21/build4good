@@ -46,7 +46,15 @@ function pickUserAgent() {
 }
 
 const { LOCATIONS, PERIODS } = require('./constants');
-const { saveMenu, updateScrapeJobStatus, upsertJob } = require('./db');
+const { saveMenu, updateScrapeJobStatus, upsertJob, getKnownFood, upsertFoodItem } = require('./db');
+
+function todayStr() {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 function getCurrentPeriod() {
   const hour = new Date().getHours();
@@ -61,9 +69,17 @@ function getDefaultLocation() {
 }
 
 function processMenuJson(json) {
-  if (!json?.period?.categories) return [];
+  // Dine On Campus v4/v1 API can have categories or stations at different levels
+  const categories = json?.period?.categories 
+                  || json?.menu?.periods?.[0]?.categories 
+                  || json?.categories 
+                  || json?.stations 
+                  || json?.menu?.periods?.[0]?.stations
+                  || json?.period?.stations;
+  
+  if (!categories || !Array.isArray(categories)) return [];
 
-  return json.period.categories.map(cat => ({
+  return categories.map(cat => ({
     name: (cat.name || '').trim(),
     items: (cat.items || []).map(item => {
       const nutrients = item.nutrients || [];
@@ -86,16 +102,45 @@ function processMenuJson(json) {
         });
       }
 
-      return {
+      let itemObj = {
         name: (item.name || '').trim(),
         portion: item.portion || '',
         calories: item.calories || 0,
         protein: getVal('Protein'),
         fat: getVal('Total Fat'),
         carbs: getVal('Total Carbohydrates'),
+        sodium: getVal('Sodium'),
+        fiber: getVal('Dietary Fiber'),
+        sugars: getVal('Sugars'),
+        saturated_fat: getVal('Saturated Fat'),
+        trans_fat: getVal('Trans Fat'),
+        cholesterol: getVal('Cholesterol'),
+        calcium: getVal('Calcium'),
+        iron: getVal('Iron'),
+        vit_a: getVal('Vitamin A'),
+        vit_c: getVal('Vitamin C'),
         badges,
         description: (item.desc || '').trim()
       };
+
+      // Fallback Estimation logic
+      if (!itemObj.calories || itemObj.calories === 0) {
+        const history = getKnownFood(itemObj.name);
+        if (history) {
+          itemObj.calories = history.calories;
+          itemObj.protein = history.protein;
+          itemObj.fat = history.fat;
+          itemObj.carbs = history.carbs;
+          itemObj.sodium = history.sodium || 0;
+        }
+      }
+
+      // Record this item's nutrition for future fallbacks
+      if (itemObj.calories > 0) {
+        upsertFoodItem(itemObj);
+      }
+
+      return itemObj;
     })
   }));
 }
@@ -104,24 +149,38 @@ function parseMenuHtml(html) {
   const $ = cheerio.load(html);
   const stations = [];
 
-  // Find each station category block
+  // Find each station category block (accordion headers/buttons)
   $('[aria-label]').filter((i, el) => {
-    const label = $(el).attr('aria-label') || '';
-    return label.startsWith('Toggle ') && label.endsWith(' category');
+    const label = ($(el).attr('aria-label') || '').toLowerCase();
+    // Usually "Toggle {Station} category" or similar
+    return (label.includes('toggle') && label.includes('category')) || 
+           (label.includes('station') && label.includes('toggle'));
   }).each((i, stationEl) => {
     const label = $(stationEl).attr('aria-label') || '';
-    const stationName = label.replace('Toggle ', '').replace(' category', '');
+    const stationName = label.replace(/toggle /i, '').replace(/ category/i, '').trim();
 
-    // Find the table after this button
-    const table = $(stationEl).closest('.p-4').find('table').first();
+    // Find the table after this button or within the same container
+    let container = $(stationEl).closest('.p-4, .px-4, .mb-4');
+    let table = container.find('table').first();
+    
+    // If no table in container, look for next table in DOM
+    if (!table.length) {
+      table = $(stationEl).closest('div').nextAll('table').first();
+    }
+    if (!table.length) {
+      table = $(stationEl).parent().nextAll().find('table').first();
+    }
+
     const items = [];
-
     table.find('tbody tr').each((j, row) => {
-      const btn = $(row).find('button[aria-label^="View nutritional"]');
-      if (!btn.length) return;
-      const itemName = btn.text().trim();
-
       const cells = $(row).find('td');
+      if (!cells.length) return;
+
+      const firstCell = cells.eq(0);
+      const btn = firstCell.find('button');
+      const itemName = (btn.length ? btn.text() : firstCell.text()).trim();
+      if (!itemName || itemName.toLowerCase().includes('click any item')) return;
+
       const portionCell = cells.eq(1).text().trim();
       const caloriesCell = cells.eq(2).text().trim();
       const calories = parseInt(caloriesCell) || 0;
@@ -139,10 +198,22 @@ function parseMenuHtml(html) {
 
       const description = $(row).find('td').first().find('div.mt-1').text().trim();
 
-      if (itemName) {
-        // Fallback items don't have protein/fat/carbs from static HTML easily
-        items.push({ name: itemName, portion: portionCell, calories, badges, description, protein: 0, fat: 0, carbs: 0 });
+      const itemObj = { name: itemName, portion: portionCell, calories, protein: 0, fat: 0, carbs: 0, sodium: 0, badges, description };
+
+      // Fallback for HTML too
+      if (!itemObj.calories) {
+        const history = getKnownFood(itemName);
+        if (history) {
+          itemObj.calories = history.calories;
+          itemObj.protein = history.protein;
+          itemObj.fat = history.fat;
+          itemObj.carbs = history.carbs;
+          itemObj.sodium = history.sodium || 0;
+        }
       }
+
+      if (itemObj.calories > 0) upsertFoodItem(itemObj);
+      items.push(itemObj);
     });
 
     if (items.length > 0) {
@@ -177,19 +248,26 @@ async function scrapeMenu(locationSlug, periodSlug, date, onStep = () => { }) {
 
   console.log(`[Scraper] UA: ${userAgent.slice(0, 60)}...`);
 
-  onStep('Launching internal browser...');
+  onStep('Launching Aggie Browser Engine...');
   const b = await createBrowser(proxy);
 
+  onStep('Creating secure tab...');
   const page = await b.newPage();
+
+  onStep('Optimizing viewport...');
+  await page.setViewport({ width: 1280, height: 800 });
+  await page.setUserAgent(userAgent);
 
   // Setup interception for JSON menu data
   let menuJson = null;
+  onStep('Connecting to Dine On Campus...');
   await page.setRequestInterception(false); // We just listen to responses
 
   page.on('response', async (response) => {
     const url = response.url();
-    // Intercept v4 menu API
-    if (url.includes('apiv4.dineoncampus.com') && url.includes('/menu') && url.includes(`date=${date}`)) {
+    // Intercept v4 or v1 menu API
+    const isMenuCall = (url.includes('dineoncampus.com') && url.includes('/menu') && url.includes(`date=${date}`));
+    if (isMenuCall) {
       try {
         menuJson = await response.json();
         console.log('[Scraper] Intercepted menu JSON response.');
@@ -249,19 +327,41 @@ async function scrapeMenu(locationSlug, periodSlug, date, onStep = () => { }) {
 
     onStep('Processing menu items...');
 
-    // Prioritize intercepted JSON data
+    // Prioritize intercepted JSON data if it actually contains items
     if (menuJson) {
-      console.log('[Scraper] Using rich JSON data for menu.');
+      console.log('[Scraper] Intercepted JSON detected, processing...');
       const result = processMenuJson(menuJson);
-      if (result && result.length > 0) return result;
-      console.log('[Scraper] JSON processing returned no stations, trying fallback.');
+      if (result && result.length > 0 && result.some(s => s.items.length > 0)) {
+        console.log('[Scraper] Using rich JSON data with items.');
+        return result;
+      }
+      console.log('[Scraper] Intercepted JSON was empty or skeleton-only, checking HTML.');
     }
 
-    console.log('[Scraper] Falling back to HTML parsing.');
+    console.log('[Scraper] Falling back to HTML parsing or merging...');
     const html = await page.content();
-    const stations = parseMenuHtml(html);
-    console.log('[Scraper] Found stations:', stations.length);
-    return stations;
+    const htmlStations = parseMenuHtml(html);
+    
+    if (menuJson) {
+      const jsonStations = processMenuJson(menuJson);
+      // Merge: Take HTML stations if they have more items or if JSON station is missing/empty
+      const finalStations = [...jsonStations];
+      
+      htmlStations.forEach(hs => {
+        const js = finalStations.find(s => s.name.toLowerCase() === hs.name.toLowerCase());
+        if (!js) {
+          finalStations.push(hs);
+        } else if (js.items.length === 0 && hs.items.length > 0) {
+          // Replace empty JSON station with populated HTML station
+          Object.assign(js, hs);
+        }
+      });
+      console.log(`[Scraper] Merged JSON (${jsonStations.length}) and HTML (${htmlStations.length}) -> Final: ${finalStations.length}`);
+      return finalStations.filter(s => s.items.length > 0);
+    }
+
+    console.log('[Scraper] Found stations via HTML:', htmlStations.length);
+    return htmlStations.filter(s => s.items.length > 0);
   } finally {
     await page.close();
     // Always close the browser so the proxy is truly released
