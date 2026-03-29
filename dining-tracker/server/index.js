@@ -10,7 +10,8 @@ const {
     getMenu, createScrapeJob, getScrapeJob, getAllLocations,
     cleanupMenus, getShortcuts, saveShortcut, updateMacroGoals,
     updateUserStats, updateTrackedNutrients, updateUserNutrients, updateUserGoals,
-    addWaitTime, getWaitTimeStats, getWaitTimeStatsAll, clearStaleJobs
+    addWaitTime, getWaitTimeStats, getWaitTimeStatsAll, clearStaleJobs,
+    getLeaderboard
 } = require('./db');
 
 // Run DB cleanup on startup
@@ -178,6 +179,13 @@ app.post('/api/user/goal', authenticateToken, async (req, res) => {
     res.json({ success: true });
 });
 
+app.get('/api/leaderboard', async (req, res) => {
+    const { item } = req.query;
+    if (!item) return res.json({ leaderboard: [] });
+    const leaderboard = getLeaderboard(item);
+    res.json({ leaderboard });
+});
+
 // Wait Times API (Shared)
 app.get('/api/locations/:slug/wait-time', async (req, res) => {
     const stats = await getWaitTimeStatsAll(req.params.slug);
@@ -279,5 +287,5 @@ app.use((req, res) => {
 // ── START ──────────────────────────────────────────
 const PORT = process.env.PORT || 3333;
 app.listen(PORT, () => {
-    console.log(`\n🍽️  Aggie Dining Tracker (Auth-Enabled)\n   Running on http://localhost:${PORT}`);
+    console.log(`\n🍽️  MindfulMacros (Auth-Enabled)\n   Running on http://localhost:${PORT}`);
 });

@@ -266,7 +266,7 @@ async function scrapeMenu(locationSlug, periodSlug, date, onStep = () => { }) {
 
   console.log(`[Scraper] UA: ${userAgent.slice(0, 60)}...`);
 
-  onStep('Launching Aggie Browser Engine...');
+  onStep('Launching Mindful Browser Engine...');
   const b = await createBrowser(proxy);
 
   onStep('Creating secure tab...');
@@ -319,7 +319,7 @@ async function scrapeMenu(locationSlug, periodSlug, date, onStep = () => { }) {
     if (loc && per) {
         onStep('Attempting direct API connection...');
         const fetch = require('node-fetch');
-        const siteId = '5751fd3190975b60e048929a'; // TAMU
+        const siteId = '5751fd3190975b60e048929a'; // MindfulMacros
         const apiUrl = `https://api.dineoncampus.com/v1/location/menu?site_id=${siteId}&location_id=${loc.id}&period_id=${per.id}&date=${date}`;
         console.log(`[Scraper] API URL: ${apiUrl}`);
         try {

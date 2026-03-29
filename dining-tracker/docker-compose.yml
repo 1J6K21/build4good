@@ -5,7 +5,7 @@ services:
       context: .
       dockerfile: Dockerfile
     platform: linux/amd64
-    container_name: aggie-dining-app
+    container_name: mindful-macros-app
     restart: unless-stopped
     ports:
       - "${PORT:-3333}:3333"
@@ -35,7 +35,7 @@ services:
       context: .
       dockerfile: Dockerfile
     platform: linux/amd64
-    container_name: aggie-dining-cron
+    container_name: mindful-macros-cron
     restart: unless-stopped
     environment:
       - NODE_ENV=production

@@ -1,5 +1,5 @@
 /* ════════════════════════════════════════════
-   Aggie Dining Tracker — Frontend App (Authenticated)
+   MindfulMacros — Frontend App (Authenticated)
    ════════════════════════════════════════════ */
 
 const API = '';
@@ -13,6 +13,7 @@ let weekChart = null;
 let selectedLoggedMeals = [];
 let lastFetchedLogs = [];
 let servingIncrement = 0.5;
+let trackingDate = null; // Will be initialized by todayStr() later
 
 // ── Token Storage ─────────────────────────────
 function getToken() { return localStorage.getItem('auth_token'); }
@@ -112,6 +113,11 @@ function onLoginSuccess() {
     document.getElementById('userAvatar').src = currentUser.picture;
     document.getElementById('userName').textContent = currentUser.name;
     document.getElementById('userEmail').textContent = currentUser.email;
+    
+    // Initialize Tracking Date
+    trackingDate = todayStr();
+    updateNavDateDisplay(trackingDate);
+
     showPage('dashboard');
 }
 
@@ -180,7 +186,7 @@ async function refreshDashboard() {
     selectedLoggedMeals = [];
     updateBulkActions();
 
-    const date = todayStr();
+    const date = trackingDate || todayStr();
     const logs = await fetchLogs(date);
     const totals = (logs || []).reduce((acc, l) => {
         acc.cal += (l.calories || 0);
@@ -254,8 +260,19 @@ async function refreshDashboard() {
     }
 
     if (document.getElementById('todayDateLabel')) {
+        const d = new Date((trackingDate || todayStr()) + 'T12:00:00');
         document.getElementById('todayDateLabel').textContent =
-            new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+            d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    }
+
+    if (document.getElementById('dashboardMealsTitle')) {
+      const isToday = (trackingDate || todayStr()) === todayStr();
+      document.getElementById('dashboardMealsTitle').textContent = isToday ? "Today's Meals" : "Logged Meals";
+    }
+
+    if (document.getElementById('ringLabelTop')) {
+      const isToday = (trackingDate || todayStr()) === todayStr();
+      document.getElementById('ringLabelTop').textContent = isToday ? "Today's Calories" : "Daily Calories";
     }
 
     drawRing(totals.cal, calGoal);
@@ -304,7 +321,7 @@ async function logShortcut(id, name) {
     const s = data.shortcuts.find(x => x.id === id);
     if (!s) return;
 
-    const date = todayStr();
+    const date = trackingDate || todayStr();
     for (const item of s.items) {
         await addLogEntry(date, 'shortcut', [item]);
     }
@@ -695,7 +712,7 @@ async function initMenuPage() {
     dateInp.min = formatDate(minDate);
     dateInp.max = formatDate(maxDate);
 
-    if (!dateInp.value) dateInp.value = todayStr();
+    if (!dateInp.value) dateInp.value = trackingDate || todayStr();
     updateAvailablePeriods();
     loadMenu();
 }
@@ -848,7 +865,7 @@ function renderMenu(stations, locName, period, date, waitStats = []) {
                 </div>
                 <p style="font-size: 1.2rem; margin-bottom: 8px;"><strong>${isFuture ? 'Menu not yet published' : 'Location is closed'}</strong></p>
                 <p class="form-hint" style="max-width: 300px; margin: 0 auto;">${isFuture ? 'Dining halls usually publish menus 1 week in advance. Check back soon!' : 'This location may be closed for the selected meal period or date.'}</p>
-                <button class="btn btn-ghost" style="margin-top: 24px; border: 1px solid #000;" onclick="showPage('dashboard')">Back to Dashboard</button>
+                <button class="btn btn-outline" style="margin-top: 24px;" onclick="showPage('dashboard')">Back to Dashboard</button>
             </div>
         `;
         return;
@@ -1018,6 +1035,18 @@ function updateLogBar() {
 }
 
 function openLogModal() {
+    const d = new Date((trackingDate || todayStr()) + 'T12:00:00');
+    const dateStr = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    
+    document.getElementById('logSummary').innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+            <strong style="color: var(--text-2);"><i class="fa-solid fa-calendar-day"></i> Logging Date:</strong>
+            <span style="font-weight: 800; color: var(--primary);">${dateStr}</span>
+        </div>
+        <div style="font-size: 0.8rem; color: var(--text-3); margin-top: 4px;">
+            ${selectedItems.length} item(s) selected
+        </div>
+    `;
     document.getElementById('logModalBackdrop').classList.add('open');
 }
 
@@ -1026,7 +1055,7 @@ function closeLogModal() {
 }
 
 async function confirmLog() {
-    const date = todayStr();
+    const date = trackingDate || todayStr();
     // Multiply by servings before sending to legacy API or update API to handle servings
     const itemsToLog = selectedItems.map(i => ({
         ...i,
@@ -1093,7 +1122,7 @@ function renderScraping(step) {
             <p class="loading-title">Extracting nutritional data...</p>
             <div class="scraping-step" style="background: rgba(80,0,0,0.05); padding: 10px 20px; border-radius: 8px; margin-top: 10px;">
                 <span style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-3); display: block; margin-bottom: 4px;">Current Step</span>
-                <strong style="color: var(--maroon);">${step || 'Initializing...'}</strong>
+                <strong style="color: var(--primary);">${step || 'Initializing...'}</strong>
             </div>
         </div>
     `;
@@ -1151,6 +1180,63 @@ function formatDate(d) {
 
 function todayStr() {
     return formatDate(new Date());
+}
+
+// ── Nav Date UI Helpers ──────────────────────────
+
+function updateNavDateDisplay(dateStr) {
+    if (!dateStr) return;
+    const d = new Date(dateStr + 'T12:00:00');
+    const month = d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+    const day = d.getDate();
+    const dayName = d.toLocaleDateString('en-US', { weekday: 'long' });
+    const fullDate = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+    document.getElementById('navMonth').textContent = month;
+    document.getElementById('navDay').textContent = day;
+    
+    const today = todayStr();
+    const navDayNameEl = document.getElementById('navDayName');
+    if (dateStr === today) {
+        navDayNameEl.textContent = 'Today';
+    } else {
+        navDayNameEl.textContent = dayName;
+    }
+    
+    document.getElementById('navDateFull').textContent = fullDate;
+    
+    const navPicker = document.getElementById('navDatePicker');
+    if (navPicker) navPicker.value = dateStr;
+}
+
+function toggleNavDatePicker() {
+    const el = document.getElementById('navDatePicker');
+    if (el && typeof el.showPicker === 'function') {
+        el.showPicker();
+    } else if (el) {
+        el.click();
+    }
+}
+
+function onNavDateChange(newDate) {
+    if (!newDate) return;
+    trackingDate = newDate;
+    updateNavDateDisplay(newDate);
+    
+    const dashboardPage = document.getElementById('page-dashboard');
+    const menuPage = document.getElementById('page-menu');
+    
+    if (dashboardPage && dashboardPage.classList.contains('active')) {
+        refreshDashboard();
+    } else if (menuPage && menuPage.classList.contains('active')) {
+        const menuDateInput = document.getElementById('dateInput');
+        if (menuDateInput) {
+            menuDateInput.value = newDate;
+            onFilterChange(); 
+        }
+    }
+    
+    toast(`Tracking: ${newDate}`);
 }
 
 function toast(msg) {
@@ -1337,13 +1423,13 @@ function applyAdvisorSuggested() {
 // Helper to update the macro grid dynamically
 function renderDynamicNutrientCard(metric, value, goal = 2400) {
     const labels = {
-        sodium: { label: 'Sodium', icon: '🧂', unit: 'mg', goal: 2300, color: 'maroon' },
+        sodium: { label: 'Sodium', icon: '🧂', unit: 'mg', goal: 2300, color: 'primary' },
         fiber: { label: 'Fiber', icon: '🥦', unit: 'g', goal: 25, color: 'green' },
         sugar: { label: 'Sugar', icon: '🍭', unit: 'g', goal: 50, color: 'amber' },
         water: { label: 'Water', icon: '💧', unit: 'oz', goal: 100, color: 'blue' }
     };
 
-    const cfg = labels[metric] || { label: metric, icon: '📊', unit: '', goal: 100, color: 'maroon' };
+    const cfg = labels[metric] || { label: metric, icon: '📊', unit: '', goal: 100, color: 'primary' };
     const displayGoal = goal || cfg.goal;
     const pct = Math.min(100, Math.round((value / displayGoal) * 100));
 

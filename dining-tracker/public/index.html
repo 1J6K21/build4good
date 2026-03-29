@@ -4,8 +4,8 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Aggie Dining Tracker</title>
-    <meta name="description" content="Track calories from TAMU dining halls — browse live menus and log your meals." />
+    <title>Mindful Macros</title>
+    <meta name="description" content="Smarter nutritional tracking for campus dining — browse live menus and log your daily macros." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
@@ -23,10 +23,10 @@
             <div class="auth-logo">
                 <i class="fa-solid fa-utensils"></i>
             </div>
-            <h1 class="auth-title">Aggie Dining</h1>
-            <p class="auth-subtitle">Track your macros across every TAMU dining hall with one click.</p>
+            <h1 class="auth-title">Mindful Macros</h1>
+    <p class="auth-subtitle">Smarter nutritional tracking for campus dining. Log your macros with one click.</p>
             <div id="googleBtn" class="auth-btn-wrapper"></div>
-            <p style="margin-top: 2rem; font-size: 0.8rem; opacity: 0.4;">Securely sign in with your @tamu.edu account
+            <p style="margin-top: 2rem; font-size: 0.8rem; opacity: 0.4;">Securely sign in with your student account
             </p>
         </div>
     </div>
@@ -36,8 +36,20 @@
         <div class="nav-inner">
             <a class="nav-logo" href="#" onclick="showPage('dashboard')">
                 <i class="fa-solid fa-utensils"></i>
-                <span class="logo-text">Aggie Dining</span>
+                <span class="logo-text">Mindful Macros</span>
             </a>
+            <div class="nav-date-wrapper" onclick="toggleNavDatePicker()">
+                <div class="calendar-tab">
+                    <div class="calendar-tab-month" id="navMonth">MAR</div>
+                    <div class="calendar-tab-day" id="navDay">28</div>
+                </div>
+                <div class="nav-date-info">
+                    <span class="nav-date-dayname" id="navDayName">Saturday</span>
+                    <span class="nav-date-full" id="navDateFull">March 28, 2026</span>
+                </div>
+                <!-- Native date input hidden, used for the picker -->
+                <input type="date" id="navDatePicker" onchange="onNavDateChange(this.value)" />
+            </div>
             <div class="nav-links">
                 <button class="nav-btn active" id="nav-dashboard" onclick="showPage('dashboard')">Dashboard</button>
                 <button class="nav-btn" id="nav-menu" onclick="showPage('menu')">Browse Menu</button>
@@ -46,7 +58,7 @@
                     <div id="userDropdown" class="user-dropdown">
                         <div class="user-info">
                             <span id="userName">User</span>
-                            <span id="userEmail">email@tamu.edu</span>
+                            <span id="userEmail">email@example.edu</span>
                         </div>
                         <hr />
                         <li><button class="dropdown-item" onclick="openGoalsModal()">
@@ -67,72 +79,72 @@
             <aside class="newspaper-sidebar left">
                 <div class="newspaper-column">
                     <div class="news-clipping">
-                        <div class="clipping-header">AGGIE TRADITIONS</div>
-                        <h3 class="clipping-title">The Spirit of Aggieland</h3>
-                        <p class="clipping-text" style="font-size: 0.8rem;">"We've never been licked!" - The 12th Man remains ready to serve at a moment's notice. Remember to stand for the entirety of the game!</p>
-                        <div class="clipping-footer">Vol. 147 | Edition 1</div>
+                        <div class="clipping-header">NUTRITION TIPS</div>
+                        <h3 class="clipping-title">Mindful Eating</h3>
+                        <p class="clipping-text" style="font-size: 0.8rem;">Focus on the flavor, texture, and aroma of your food to improve digestion and satisfaction. Slow down and enjoy each bite!</p>
+                        <div class="clipping-footer">Vol. 1 | Edition 1</div>
                     </div>
                     <div class="news-clipping">
-                        <div class="clipping-header">AGGIE HONOR</div>
-                        <h3 class="clipping-title">CODE OF HONOR</h3>
-                        <p class="clipping-text" style="font-weight: bold; border: 1px solid #000; padding: 10px; background: rgba(0,0,0,0.03);">"An Aggie does not lie, cheat or steal or tolerate those who do."</p>
+                        <div class="clipping-header">MACRO GUIDELINES</div>
+                        <h3 class="clipping-title">PROTEIN FOCUS</h3>
+                        <p class="clipping-text" style="font-weight: bold; border: 1px solid #000; padding: 10px; background: rgba(0,0,0,0.03);">"Aim for 0.8g to 1g of protein per pound of body weight to support muscle recovery and growth."</p>
                     </div>
                     <div class="news-clipping">
-                        <div class="clipping-header">SBISA FACT</div>
-                        <h3 class="clipping-title">Oldest Dining Hall</h3>
-                        <p class="clipping-text" style="font-size: 0.8rem;">Did you know Sbisa Dining Hall opened in 1912? It was named after Bernard Sbisa, the college's first steward.</p>
+                        <div class="clipping-header">HEALTHY HABIT</div>
+                        <h3 class="clipping-title">Hydration First</h3>
+                        <p class="clipping-text" style="font-size: 0.8rem;">Did you know drinking a glass of water before meals can help with portion control and metabolic function? Stay hydrated!</p>
                     </div>
                     <div class="news-clipping">
-                        <div class="clipping-header">TRADITION CORNER</div>
+                        <div class="clipping-header">CORE PRINCIPLES</div>
                         <ul class="clipping-list" style="font-size: 0.75rem;">
-                            <li style="margin-bottom: 8px;"><strong>SILVER TAPS:</strong> Held the first Tuesday of the month for students who passed.</li>
-                            <li style="margin-bottom: 8px;"><strong>MUSTER:</strong> April 21st. Softly call the roll of those absent.</li>
-                            <li><strong>ELEPHANT WALK:</strong> Seniors say goodbye to campus.</li>
+                            <li style="margin-bottom: 8px;"><strong>CONSISTENCY:</strong> Small, daily improvements lead to sustainable long-term results.</li>
+                            <li style="margin-bottom: 8px;"><strong>BALANCE:</strong> Focus on whole foods while allowing for flexibility in your diet.</li>
+                            <li><strong>SLEEP:</strong> Quality rest is the foundation of a healthy metabolism.</li>
                         </ul>
                     </div>
                     <div class="news-clipping">
-                        <div class="clipping-header">CENTURY TREE</div>
-                        <h3 class="clipping-title">Oldest Aggie Tradition</h3>
-                        <p class="clipping-text" style="font-size: 0.82rem;">The legendary Century Tree stands near the academic building. It is said that if two people walk under it together, they will eventually marry.</p>
+                        <div class="clipping-header">FIBER INTAKE</div>
+                        <h3 class="clipping-title">The Fiber Factor</h3>
+                        <p class="clipping-text" style="font-size: 0.82rem;">Fiber keeps you full longer and supports digestive health. Look for whole grains, beans, and colorful vegetables on your plate.</p>
                     </div>
                     <div class="news-clipping clipping-pushed">
                         <div class="clipping-header">QUICK TIPS</div>
                         <ul class="clipping-list">
-                            <li>Gig 'em!</li>
-                            <li>Early birds get the best eggs at Sbisa.</li>
-                            <li>Don't forget your sports pass.</li>
-                            <li>Stand for the 12th Man.</li>
+                            <li>Prioritize Protein.</li>
+                            <li>Add greens to every meal.</li>
+                            <li>Track, don't obsess.</li>
+                            <li>Listen to your hunger cues.</li>
                         </ul>
                     </div>
                     <div class="news-clipping">
-                        <div class="clipping-header">YELL PRACTICE</div>
-                        <h3 class="clipping-title">MIDNIGHT YELL</h3>
-                        <p class="clipping-text" style="font-size: 0.75rem;">Held at Kyle Field before home games. Join the Yell Leaders to get the stadium rocking. Warm up your pipes!</p>
+                        <div class="clipping-header">METABOLIC HEALTH</div>
+                        <h3 class="clipping-title">STRENGTH TRAINING</h3>
+                        <p class="clipping-text" style="font-size: 0.75rem;">Building muscle increases your resting metabolic rate, meaning you burn more calories even while at rest. Keep moving!</p>
                     </div>
                     <div class="news-clipping">
-                        <div class="clipping-header">CORPS OF CADETS</div>
-                        <h3 class="clipping-title">The Keeper of the Spirit</h3>
-                        <p class="clipping-text" style="font-size: 0.8rem;">Established in 1876, the Corps remains the largest uniformed student body in the nation outside the service academies. Proud members of the 12th Man.</p>
+                        <div class="clipping-header">SMART SNACKING</div>
+                        <h3 class="clipping-title">Choose Wisely</h3>
+                        <p class="clipping-text" style="font-size: 0.8rem;">Opt for high-protein or high-fiber snacks to keep energy levels stable throughout the day. Nuts, seeds, and fruit are great options.</p>
                     </div>
                     <div class="news-clipping">
-                        <div class="clipping-header">REVEILLE</div>
-                        <h3 class="clipping-title">MISS REVEILLE X</h3>
-                        <p class="clipping-text" style="font-size: 0.82rem;">The First Lady of Aggieland. If she barks in class, the professor is expected to dismiss the lecture immediately!</p>
+                        <div class="clipping-header">REST & RECOVERY</div>
+                        <h3 class="clipping-title">Listen to Your Body</h3>
+                        <p class="clipping-text" style="font-size: 0.82rem;">Rest days are just as important as training days. They allow your muscles to repair and your central nervous system to recover.</p>
                     </div>
                     <div class="news-clipping">
-                        <div class="clipping-header">THE AGGIE RING</div>
-                        <h3 class="clipping-title">A Symbol of Unity</h3>
-                        <p class="clipping-text" style="font-size: 0.78rem;">The most recognized collegiate ring in the world. It represents a promise to serve the state and nation. Gig 'em!</p>
+                        <div class="clipping-header">MEAL TIMING</div>
+                        <h3 class="clipping-title">Finding Your Rhythm</h3>
+                        <p class="clipping-text" style="font-size: 0.78rem;">The best meal timing is the one that fits your schedule and allows you to remain consistent with your goals. Pre-workout fuel is key!</p>
                     </div>
                     <div class="news-clipping">
-                        <div class="clipping-header">GIG 'EM ORIGINS</div>
-                        <h3 class="clipping-title">Homer Norton, 1930</h3>
-                        <p class="clipping-text" style="font-size: 0.8rem;">Coach Homer Norton started the "Gig 'em" tradition at a yell practice. It's now the universal sign of Aggie approval.</p>
+                        <div class="clipping-header">WHOLE FOODS</div>
+                        <h3 class="clipping-title">Single Ingredients</h3>
+                        <p class="clipping-text" style="font-size: 0.8rem;">When possible, choose foods with a single ingredient. It simplifies tracking and ensures you're getting high-quality fuel.</p>
                     </div>
                     <div class="news-clipping">
-                        <div class="clipping-header">AGGIE VOCAB</div>
-                        <h3 class="clipping-title">Good Bull</h3>
-                        <p class="clipping-text" style="font-size: 0.78rem;">Phrase used to describe anything that follows the Aggie Code of Honor or shows great spirit.</p>
+                        <div class="clipping-header">MINDSET MATTERS</div>
+                        <h3 class="clipping-title">Progress Over Perfection</h3>
+                        <p class="clipping-text" style="font-size: 0.78rem;">Don't let one 'off' day derail your progress. Get back on track with your next meal and focus on the long game.</p>
                     </div>
                 </div>
             </aside>
@@ -143,7 +155,7 @@
             <div class="card meals-card full-width-card">
                 <div class="card-header">
                     <div class="header-left">
-                        <h2>Today's Meals</h2>
+                        <h2 id="dashboardMealsTitle">Today's Meals</h2>
                         <span class="card-date" id="todayDateLabel"></span>
                     </div>
                     <div id="mealsBulkActions" class="bulk-actions" style="display: none;">
@@ -200,7 +212,7 @@
             <!-- Hero row: calorie ring + macros + quick log -->
             <div class="dashboard-hero">
                 <div class="calorie-ring-card card">
-                    <div class="ring-label-top">Today's Calories</div>
+                    <div class="ring-label-top" id="ringLabelTop">Today's Calories</div>
                     <div class="ring-wrap">
                         <canvas id="calRingCanvas" width="220" height="220"></canvas>
                         <div class="ring-center">
@@ -227,7 +239,7 @@
                                     <div class="macro-sub">Remaining: <span id="proteinRemaining">--</span>g</div>
                                 </div>
                                 <div class="macro-ring-container">
-                                    <svg viewBox="0 0 36 36" class="circular-chart maroon">
+                                    <svg viewBox="0 0 36 36" class="circular-chart primary">
                                         <path class="circle-bg"
                                             d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                                         <path class="circle" id="proteinRing" stroke-dasharray="0, 100"
@@ -407,71 +419,71 @@
             <aside class="newspaper-sidebar right">
                 <div class="newspaper-column">
                     <div class="news-clipping">
-                        <div class="clipping-header">SCOREBOARD</div>
-                        <h3 class="clipping-title">BTHO CALORIES</h3>
+                        <div class="clipping-header">NUTRITION STATS</div>
+                        <h3 class="clipping-title">GOAL TRACKER</h3>
                         <div class="score-row">
                             <span>YOU</span>
-                            <span>1</span>
+                            <span>✓</span>
                         </div>
                         <div class="score-row">
-                            <span>HUNGER</span>
-                            <span>0</span>
+                            <span>GOAL</span>
+                            <span>--</span>
                         </div>
                     </div>
                     <div class="news-clipping">
-                        <div class="clipping-header">WEATHER</div>
-                        <h3 class="clipping-title">College Station</h3>
-                        <p class="clipping-text">100% chance of Maroon & White. Humidity levels: Aggie Spirit Overflowing.</p>
+                        <div class="clipping-header">CAMPUS LIFE</div>
+                        <h3 class="clipping-title">Daily Outlook</h3>
+                        <p class="clipping-text">100% chance of high energy. Morale at an all-time high as macros stay on track.</p>
                     </div>
                     <div class="news-clipping">
-                        <div class="clipping-header">AGGIE JARGON</div>
+                        <div class="clipping-header">HEALTH TERMS</div>
                         <h3 class="clipping-title">WORD OF THE DAY</h3>
-                        <p class="clipping-text" style="font-weight: 700; font-size: 1.1rem; color: #500;">BTHO</p>
-                        <p class="clipping-text" style="font-style: italic;">verb. To beat the heck outta. Typically used before upcoming athletic events or calorie goals.</p>
+                        <p class="clipping-text" style="font-weight: 700; font-size: 1.1rem; color: #000;">BIOAVAILABILITY</p>
+                        <p class="clipping-text" style="font-style: italic;">noun. The proportion of a nutrient that is digested, absorbed and metabolized through normal pathways.</p>
                     </div>
                     <div class="news-clipping clipping-pushed">
-                        <img src="assets/logo-gray.jpg" alt="Aggie Logo" style="width:100%; margin-bottom: 10px; border: 1px solid #000; filter: grayscale(1);">
-                        <p class="clipping-text" style="font-size: 0.7rem; font-style: italic; text-align: center;">"Hullabaloo, Caneck! Caneck!<br>Hullabaloo, Caneck! Caneck!"</p>
+                        <img src="assets/logo-gray.jpg" alt="Mindful Macros Logo" style="width:100%; margin-bottom: 10px; border: 1px solid #000; filter: grayscale(1);">
+                        <p class="clipping-text" style="font-size: 0.7rem; font-style: italic; text-align: center;">Mindful Macros: Your Personal Nutritional Companion.</p>
                     </div>
                     <div class="news-clipping">
-                        <div class="clipping-header">CAMPUS NEWS</div>
-                        <h3 class="clipping-title">Reveille spotted!</h3>
-                        <p class="clipping-text">The First Lady of Aggieland was seen visiting a local dining hall today. Morale has reached an all-time high.</p>
+                        <div class="clipping-header">DINING NEWS</div>
+                        <h3 class="clipping-title">Better Options</h3>
+                        <p class="clipping-text">New high-protein options are being seen across campus. Keep an eye out for fresh arrivals at the grill!</p>
                     </div>
                     <div class="news-clipping">
-                        <div class="clipping-header">AGGIE PRIDE</div>
-                        <h3 class="clipping-title">THE 12TH MAN</h3>
-                        <p class="clipping-text" style="font-size: 0.8rem;">We stand for the entirety of the game as a symbol of our readiness to serve if called upon. Home of the 12th Man since 1922.</p>
+                        <div class="clipping-header">MEAL PREP</div>
+                        <h3 class="clipping-title">Smart Planning</h3>
+                        <p class="clipping-text" style="font-size: 0.8rem;">Decide your meals before you arrive at the dining hall to avoid impulsive, less nutritious choices. Let the menu guide you.</p>
                     </div>
                     <div class="news-clipping">
-                        <div class="clipping-header">CAMPUS ETIQUETTE</div>
-                        <h3 class="clipping-title">THE MSC</h3>
-                        <p class="clipping-text" style="font-size: 0.8rem;">Please remove your hats when entering the Memorial Student Center to honor our fallen Aggies. Avoid walking on the grass around the facility.</p>
+                        <div class="clipping-header">PROPER LOGGING</div>
+                        <h3 class="clipping-title">The "Wait" Period</h3>
+                        <p class="clipping-text" style="font-size: 0.8rem;">Wait 20 minutes after eating to see if you're actually still hungry. It takes time for satiety signals to reach your brain.</p>
                     </div>
                     <div class="news-clipping">
-                        <div class="clipping-header">AGGIE WAR HYMN</div>
-                        <h3 class="clipping-title">"Saw Varsity's Horns Off"</h3>
-                        <p class="clipping-text" style="font-size: 0.75rem; font-style: italic;">Hullabaloo, Caneck! Caneck!<br>Hullabaloo, Caneck! Caneck!<br>Good-bye to Texas University!<br>So long to the orange and white!</p>
+                        <div class="clipping-header">DAILY TARGETS</div>
+                        <h3 class="clipping-title">Consistency</h3>
+                        <p class="clipping-text" style="font-size: 0.75rem; font-style: italic;">"What gets measured, gets managed." Keep logging those meals to stay on top of your health journey.</p>
                     </div>
                     <div class="news-clipping">
-                        <div class="clipping-header">SILVER TAPS</div>
-                        <h3 class="clipping-title">First Tuesday</h3>
-                        <p class="clipping-text" style="font-size: 0.75rem;">Join us at the academic Plaza to honor our fellow Aggies who are no longer with us. The campus goes dark at 10 PM. Silent reflection is requested.</p>
+                        <div class="clipping-header">SUSTAINABILITY</div>
+                        <h3 class="clipping-title">Fresh First</h3>
+                        <p class="clipping-text" style="font-size: 0.75rem;">Whenever possible, choose the most unprocessed options available. Your body will thank you for the nutrients.</p>
                     </div>
                     <div class="news-clipping">
-                        <div class="clipping-header">THE TRADITION LIVES</div>
-                        <p class="clipping-text" style="font-size: 0.65rem; border-top: 1px dashed #000; padding-top: 10px;">"From the outside looking in, you can't understand it. From the inside looking out, you can't explain it." - E. King Gill</p>
+                        <div class="clipping-header">JOURNEY LIVES</div>
+                        <p class="clipping-text" style="font-size: 0.65rem; border-top: 1px dashed #000; padding-top: 10px;">"Health is not about being better than someone else; it's about being better than you were yesterday."</p>
                     </div>
                     <div class="news-clipping">
-                        <div class="clipping-header">OLD ARMY</div>
-                        <h3 class="clipping-title">CLASS OF '76</h3>
-                        <p class="clipping-text">Texas A&M opened its doors on Oct. 4, 1876, as the state's first public institution of higher learning.</p>
-                        <div class="clipping-footer">ESTB. 1876</div>
+                        <div class="clipping-header">HISTORY</div>
+                        <h3 class="clipping-title">ESTB. 2026</h3>
+                        <p class="clipping-text">Empowering students to take control of their nutrition, one meal at a time.</p>
+                        <div class="clipping-footer">A MINDFUL PROJECT</div>
                     </div>
                     <div class="news-clipping">
-                        <div class="clipping-header">GIG 'EM AGGIES</div>
-                        <h3 class="clipping-title">Whoop!</h3>
-                        <p class="clipping-text" style="font-size: 0.75rem;">Yell used by upperclassmen and graduates to express approval or excitement. Freshmen are not permitted to yell "Whoop!"</p>
+                        <div class="clipping-header">GO FOR IT</div>
+                        <h3 class="clipping-title">Start Today</h3>
+                        <p class="clipping-text" style="font-size: 0.75rem;">Your fitness journey is a marathon, not a sprint. Every meal is an opportunity to fuel your potential.</p>
                     </div>
                 </div>
             </aside>
@@ -536,6 +548,26 @@
         </div>
     </div>
 
+    <!-- ======================= LEADERBOARD PAGE ======================= -->
+    <div id="page-leaderboard" class="page">
+        <div class="container">
+            <div class="card full-width-card" style="margin-top: 20px;">
+                <div class="card-header" style="flex-direction: column; align-items: flex-start;">
+                    <h2>Food Leaderboards</h2>
+                    <span class="card-hint">Who tracked it the most? Join the healthy competition!</span>
+                    
+                    <div class="form-group" style="width: 100%; margin-top: 15px; display: flex; gap: 10px;">
+                        <input type="text" id="leaderboardSearchInput" class="form-input" placeholder="Search a food item (e.g. pizza, chicken, salad)..." value="pizza"/>
+                        <button class="btn btn-primary" onclick="fetchLeaderboard()">Search</button>
+                    </div>
+                </div>
+                <div class="card-body" id="leaderboardContent">
+                    <!-- Loaded dynamically -->
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- ======================= MODALS ======================= -->
 
     <!-- Macro Goals Modal -->
@@ -568,7 +600,7 @@
 
                 <div class="smart-advisor" style="margin-top: 25px; padding-top: 20px; border-top: 1px dashed #ddd;">
                     <h3
-                        style="font-size: 0.95rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; color: var(--maroon);">
+                        style="font-size: 0.95rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; color: var(--primary);">
                         <i class="fa-solid fa-wand-magic-sparkles"></i> Smart Advisor
                     </h3>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
@@ -584,7 +616,7 @@
                         </div>
                     </div>
                     <div id="advisorSuggestion"
-                        style="margin-top: 15px; background: var(--maroon-dim); padding: 12px; border-radius: 12px; font-size: 0.82rem; line-height: 1.4; color: var(--maroon); border: 1px solid rgba(80,0,0,0.1);">
+                        style="margin-top: 15px; background: var(--primary-dim); padding: 12px; border-radius: 12px; font-size: 0.82rem; line-height: 1.4; color: var(--primary); border: 1px solid var(--border);">
                         Enter your metrics above to see suggested goals based on average activity levels.
                     </div>
                     <button class="btn btn-ghost"

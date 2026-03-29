@@ -1,8 +1,8 @@
-# fly.toml — Aggie Dining Tracker
+# fly.toml — MindfulMacros
 # Deploy with: fly deploy (from the dining-tracker/ directory)
 # Docs: https://fly.io/docs/reference/configuration/
 
-app = "aggie-dining-tracker"        # ← change to your desired app name
+app = "mindful-macros"        # ← change to your desired app name
 primary_region = "dfw"              # Dallas–Fort Worth — closest to College Station
 
 [build]

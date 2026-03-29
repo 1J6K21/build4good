@@ -362,6 +362,19 @@ function getWaitTimeStatsAll(locationSlug) {
   `).all(locationSlug);
 }
 
+// ── LEADERBOARD ──────────────────────────────────
+function getLeaderboard(itemName) {
+  return db.prepare(`
+    SELECT users.name, users.picture, COUNT(*) as count
+    FROM meal_logs
+    JOIN users ON meal_logs.user_id = users.id
+    WHERE LOWER(meal_logs.item_name) LIKE ?
+    GROUP BY users.id
+    ORDER BY count DESC
+    LIMIT 10
+  `).all(`%${itemName.toLowerCase()}%`);
+}
+
 module.exports = {
   getMenu,
   saveMenu,
@@ -392,5 +405,6 @@ module.exports = {
   addWaitTime,
   getWaitTimeStats,
   getWaitTimeStatsAll,
-  clearStaleJobs
+  clearStaleJobs,
+  getLeaderboard
 };
