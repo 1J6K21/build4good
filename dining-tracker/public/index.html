@@ -158,7 +158,7 @@
                     <div class="header-left">
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <h2 id="dashboardMealsTitle" style="margin: 0;">Today's Meals</h2>
-                            <i id="mealsCollapseIcon" class="fa-solid fa-chevron-up" style="transition: transform 0.3s; color: var(--text-muted); font-size: 0.9rem;"></i>
+                            <i id="mealsCollapseIcon" class="fa-solid fa-chevron-up" style="transition: transform 0.3s; color: var(--text-muted); font-size: 0.9rem; transform: rotate(180deg);"></i>
                         </div>
                         <span class="card-date" id="todayDateLabel"></span>
                     </div>
@@ -177,7 +177,7 @@
                         </div>
                     </div>
                 </div>
-                <div id="todayMealsListWrapper" style="transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out; max-height: 5000px; overflow: hidden; opacity: 1;">
+                <div id="todayMealsListWrapper" style="transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out; max-height: 0px; overflow: hidden; opacity: 0;">
                     <div id="todayMealsList" class="meals-list">
                         <div class="empty-state">
                             <div class="empty-icon">🥗</div>
@@ -409,20 +409,112 @@
                     </div>
                 </div>
 
-                <!-- Weekly Overview -->
-                <div class="card chart-card">
+            </div>
+
+            <!-- ═══════ INSIGHT ENGINE ═══════ -->
+            <div class="dash-row-full insights-section">
+
+                <!-- Side-by-side Layout -->
+                <div class="insights-top-row">
+
+                <!-- Insight 1: Danger Day + Danger Meal heatmap (merged card) -->
+                <div class="card insight-card" id="insightDangerDay">
                     <div class="card-header">
-                        <h2>Weekly Overview</h2>
-                        <span class="card-hint">Calories per day</span>
-                    </div>
-                    <div class="chart-wrap">
-                        <div id="weekEmpty" class="chart-empty-overlay" style="display: none;">
-                            <p>No data this week</p>
+                        <div>
+                            <div class="insight-eyebrow"><i class="fa-solid fa-bolt"></i> BEHAVIORAL INSIGHT</div>
+                            <h2 style="margin:0">Your Danger Day</h2>
+                            <p class="card-hint">Which weekday derails you most?</p>
                         </div>
-                        <canvas id="weekChart"></canvas>
+                        <div class="insight-badge" id="dangerDayBadge">—</div>
+                    </div>
+                    <div class="insight-body">
+                        <div class="day-heatmap" id="dayHeatmap"></div>
+                        <div class="insight-callout" id="dangerDayCallout">
+                            <i class="fa-solid fa-circle-info"></i>
+                            <span>Log more meals to unlock this insight.</span>
+                        </div>
+
+                        <!-- ── Your Danger Meal heatmap ── -->
+                        <div class="danger-meal-divider">
+                            <div class="danger-meal-divider-labels">
+                                <div>
+                                    <div class="insight-eyebrow"><i class="fa-solid fa-table-cells"></i> CONSISTENCY TRACKER</div>
+                                    <h2 style="margin:0">Your Danger Meal</h2>
+                                    <p class="card-hint" style="margin:0">Per-meal consistency · green = on target</p>
+                                </div>
+                                <select id="heatmapPeriod" class="goal-edit-btn" onchange="updateInsights()">
+                                    <option value="1">Today</option>
+                                    <option value="7">Past Week</option>
+                                    <option value="14">14 Days</option>
+                                    <option value="28" selected>28 Days</option>
+                                    <option value="60">2 Months</option>
+                                    <option value="180">6 Months</option>
+                                    <option value="365">1 Year</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="meal-heatmap-container" id="mealHeatmapGrid"></div>
+                        <div class="hm-legend">
+                            <span class="hm-legend-label">Less</span>
+                            <div class="hm-legend-swatch" style="background:#e5e7eb" title="No data"></div>
+                            <div class="hm-legend-swatch" style="background:#fef08a" title="Skipped"></div>
+                            <div class="hm-legend-swatch" style="background:#fde68a" title="Under target"></div>
+                            <div class="hm-legend-swatch" style="background:#fbbf24" title="Way under"></div>
+                            <div class="hm-legend-swatch" style="background:#86efac" title="Just right"></div>
+                            <div class="hm-legend-swatch" style="background:#16a34a" title="On target"></div>
+                            <div class="hm-legend-swatch" style="background:#f97316" title="Over target"></div>
+                            <div class="hm-legend-swatch" style="background:#dc2626" title="Way over"></div>
+                            <span class="hm-legend-label">More</span>
+                            <span class="hm-legend-sep"></span>
+                            <div class="hm-legend-swatch" style="background:#e5e7eb"></div><span class="hm-legend-text">No data</span>
+                            <div class="hm-legend-swatch" style="background:#fef08a"></div><span class="hm-legend-text">Skipped</span>
+                            <div class="hm-legend-swatch" style="background:#fbbf24"></div><span class="hm-legend-text">Under</span>
+                            <div class="hm-legend-swatch" style="background:#16a34a"></div><span class="hm-legend-text">On target</span>
+                            <div class="hm-legend-swatch" style="background:#f97316"></div><span class="hm-legend-text">Over</span>
+                            <div class="hm-legend-swatch" style="background:#dc2626"></div><span class="hm-legend-text">Way over</span>
+                        </div>
                     </div>
                 </div>
-            </div>
+
+                <!-- Insight 2: Culprit Analysis -->
+                <div class="card insight-card" id="insightCulprits">
+                    <div class="card-header">
+                        <div>
+                            <div class="insight-eyebrow"><i class="fa-solid fa-fire-flame-curved"></i> CULPRIT ANALYSIS</div>
+                            <h2 style="margin:0">Top Calorie Contributors</h2>
+                            <p class="card-hint">Items eating most of your budget</p>
+                        </div>
+                        <select id="culpritPeriod" class="goal-edit-btn" onchange="updateInsights()">
+                            <option value="7">7 days</option>
+                            <option value="14" selected>14 days</option>
+                            <option value="30">30 days</option>
+                        </select>
+                    </div>
+                    <div class="insight-body">
+                        <div class="culprit-list" id="culpritList"></div>
+                        <div class="macro-cal-split" id="macrocalSplit" style="margin-top:18px; display:none">
+                            <div class="split-label">CALORIE SOURCES (avg/day)</div>
+                            <div class="split-bar-row">
+                                <span class="split-name protein">Protein</span>
+                                <div class="split-bar-track"><div class="split-bar-fill protein" id="splitProtein" style="width:0%"></div></div>
+                                <span class="split-pct" id="splitProteinPct">0%</span>
+                            </div>
+                            <div class="split-bar-row">
+                                <span class="split-name carbs">Carbs</span>
+                                <div class="split-bar-track"><div class="split-bar-fill carbs" id="splitCarbs" style="width:0%"></div></div>
+                                <span class="split-pct" id="splitCarbsPct">0%</span>
+                            </div>
+                            <div class="split-bar-row">
+                                <span class="split-name fat">Fat</span>
+                                <div class="split-bar-track"><div class="split-bar-fill fat" id="splitFat" style="width:0%"></div></div>
+                                <span class="split-pct" id="splitFatPct">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                </div><!-- end insights-top-row -->
+            </div> <!-- end insights-section -->
 
         <!-- Today's log + shortcuts row -->
 

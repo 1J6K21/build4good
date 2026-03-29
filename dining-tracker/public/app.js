@@ -282,8 +282,9 @@ async function refreshDashboard() {
 
     // Safety check to ensure these execute even if shortcuts load fails
     try { updateTrendChart(); } catch (e) { console.error(e); }
-    try { updateWeeklyOverview(); } catch (e) { console.error(e); }
+    // Weekly Overview call removed
     try { updateWeightProjection(); } catch (e) { console.error(e); }
+    try { updateInsights(); } catch (e) { console.error(e); }
 }
 
 async function renderShortcuts() {
@@ -436,68 +437,7 @@ async function updateTrendChart() {
     } catch (e) { console.error('Trend load fail', e); }
 }
 
-async function updateWeeklyOverview() {
-    const endD = new Date();
-    const startD = new Date();
-    startD.setDate(endD.getDate() - 6);
-
-    const startStr = formatDate(startD);
-    const endStr = formatDate(endD);
-
-    try {
-        const res = await authFetch(`${API}/api/user/logs-range?start=${startStr}&end=${endStr}`);
-        const data = await res.json();
-        const logs = data.logs || [];
-
-        const emptyOverlay = document.getElementById('weekEmpty');
-        const hasData = logs.length > 0;
-        if (emptyOverlay) emptyOverlay.style.display = hasData ? 'none' : 'flex';
-
-        const dailyMap = {};
-        for (let i = 0; i < 7; i++) {
-            const d = new Date(startD);
-            d.setDate(d.getDate() + i);
-            dailyMap[formatDate(d)] = 0;
-        }
-        logs.forEach(l => {
-            if (dailyMap[l.date] !== undefined) dailyMap[l.date] += (l.calories || 0);
-        });
-
-        const labels = Object.keys(dailyMap).sort().map(d => {
-            const date = new Date(d + 'T12:00:00');
-            return date.toLocaleDateString('en-US', { weekday: 'short' });
-        });
-        const cals = Object.keys(dailyMap).sort().map(d => dailyMap[d]);
-
-        const canvas = document.getElementById('weekChart');
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        // Use the proper instance variable
-        if (weekChart && typeof weekChart.destroy === 'function') weekChart.destroy();
-
-        weekChart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Calories',
-                    data: cals,
-                    backgroundColor: '#500000',
-                    borderRadius: 4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: { beginAtZero: true, grid: { color: '#f5f5f5' }, ticks: { display: hasData } },
-                    x: { grid: { display: false }, ticks: { display: hasData } }
-                },
-                plugins: { legend: { display: false }, tooltip: { enabled: hasData } }
-            }
-        });
-    } catch (e) { }
-}
+// Weekly Overview graph removed.
 
 function getWeekNumber(d) {
     const temp = new Date(d.valueOf());
@@ -1881,7 +1821,7 @@ async function fetchLeaderboard(query = null) {
     }
 }
 
-let mealsCollapsed = false;
+let mealsCollapsed = true;
 
 function toggleMealsCollapse() {
     mealsCollapsed = !mealsCollapsed;
@@ -1911,6 +1851,378 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+// ══════════════════════════════════════════════
+//  INSIGHT ENGINE — Causation-Style Analytics
+// ══════════════════════════════════════════════
+
+async function updateInsights() {
+    if (!currentUser) return;
+    const heatmapDays = parseInt(document.getElementById('heatmapPeriod')?.value || '28');
+    const culpritDays = parseInt(document.getElementById('culpritPeriod')?.value || '14');
+    const days = Math.max(heatmapDays, culpritDays);
+
+    const endD = new Date();
+    const startD = new Date();
+    startD.setDate(endD.getDate() - (days - 1));
+
+    try {
+        const res = await authFetch(`${API}/api/user/logs-range?start=${formatDate(startD)}&end=${formatDate(endD)}`);
+        const data = await res.json();
+        const logs = data.logs || [];
+        renderDangerDayInsight(logs);
+        renderMealHeatmapInsight(logs);
+        renderCulpritInsight(logs);
+    } catch(e) {
+        console.error('[Insights] Failed to load:', e);
+    }
+}
+
+// ── INSIGHT: MEAL CONSISTENCY HEATMAP ──────────────────────
+function renderMealHeatmapInsight(logs) {
+    const container = document.getElementById('mealHeatmapGrid');
+    if (!container) return;
+
+    const heatmapDays = parseInt(document.getElementById('heatmapPeriod')?.value || '28');
+    const calGoal = currentUser.calorie_goal || 2000;
+
+    // Per-meal calorie targets as % of daily goal
+    const TARGETS = {
+        breakfast: calGoal * 0.25,
+        brunch:    calGoal * 0.30,
+        lunch:     calGoal * 0.35,
+        dinner:    calGoal * 0.35,
+        snack:     calGoal * 0.10,
+        shortcut:  calGoal * 0.15,
+    };
+
+    const MEAL_ROWS  = ['breakfast', 'lunch', 'dinner', 'snack'];
+    const MEAL_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack' };
+
+    // Build the date array (oldest → newest)
+    const dates = [];
+    const endD = new Date();
+    for (let i = heatmapDays - 1; i >= 0; i--) {
+        const d = new Date(endD);
+        d.setDate(d.getDate() - i);
+        dates.push(formatDate(d));
+    }
+
+    // Index logs: { date: { meal_type: totalCals } }
+    const logMap = {};
+    const datesWithAnyData = new Set();
+    logs.forEach(l => {
+        const d = l.date.split('T')[0];
+        // Only include dates in our window
+        if (!dates.includes(d)) return;
+        if (!logMap[d]) logMap[d] = {};
+        const type = (l.meal_type || 'snack').toLowerCase();
+        logMap[d][type] = (logMap[d][type] || 0) + (l.calories || 0);
+        datesWithAnyData.add(d);
+    });
+
+    const todayStr = formatDate(new Date());
+
+    // Determine cell size based on date count
+    const cellSize = heatmapDays <= 14 ? 22 : heatmapDays <= 28 ? 18 : heatmapDays <= 60 ? 14 : 10;
+    const gap      = heatmapDays <= 60 ? 3 : 2;
+
+    // ── Build HTML ────────────────────────────────────────────
+    const labelW = 80; // px for row labels
+
+    let html = `<div class="hm-grid-wrap" style="--hm-cell:${cellSize}px; --hm-gap:${gap}px; --hm-label:${labelW}px;">`;
+
+    // Date header row (every 5 days)
+    html += `<div class="hm-header-row">`;
+    html += `<div class="hm-row-lbl" style="min-width:${labelW}px"></div>`;
+    dates.forEach((d, i) => {
+        const isToday = d === todayStr;
+        if (i % 5 === 0 || isToday) {
+            const dt = new Date(d + 'T12:00:00');
+            const label = `${dt.getMonth()+1}/${dt.getDate()}`;
+            html += `<div class="hm-col-date ${isToday ? 'hm-col-today' : ''}">${label}</div>`;
+        } else {
+            html += `<div class="hm-col-date"></div>`;
+        }
+    });
+    html += `</div>`;
+
+    // One row per meal type
+    MEAL_ROWS.forEach(mealType => {
+        const target = TARGETS[mealType];
+
+        html += `<div class="hm-data-row">`;
+        html += `<div class="hm-row-lbl" style="min-width:${labelW}px">${MEAL_LABELS[mealType]}</div>`;
+
+        dates.forEach(d => {
+            const hasAnyData = datesWithAnyData.has(d);
+            const isPast     = d <= todayStr;
+
+            // Brunch counts as breakfast
+            let cals = logMap[d]?.[mealType] || 0;
+            if (mealType === 'breakfast' && logMap[d]?.brunch) {
+                cals += logMap[d].brunch;
+            }
+
+            const { bg, border, label } = getMealCellStyle(cals, target, hasAnyData, isPast);
+            const tip = `${d} · ${MEAL_LABELS[mealType]}: ${cals > 0 ? cals + ' cal (' + label + ')' : label}`;
+
+            html += `<div class="hm-cell ${d === todayStr ? 'hm-cell-today' : ''}" 
+                style="background:${bg}; border-color:${border};" 
+                title="${tip}"></div>`;
+        });
+
+        html += `</div>`;
+    });
+
+    html += `</div>`; // hm-grid-wrap
+    container.innerHTML = html;
+}
+
+function getMealCellStyle(actualCals, targetCals, hasAnyDataOnDay, isPast) {
+    // Future day
+    if (!isPast) return { bg: '#f9fafb', border: '#e5e7eb', label: 'Future' };
+    // No log data at all for this day
+    if (actualCals === 0 && !hasAnyDataOnDay) return { bg: '#e5e7eb', border: '#d1d5db', label: 'No data' };
+    // Skipped (day had other logs but not this meal)
+    if (actualCals === 0) return { bg: '#fef08a', border: '#fde047', label: 'Skipped' };
+
+    const ratio = actualCals / targetCals;
+    if (ratio < 0.40) return { bg: '#fbbf24', border: '#f59e0b', label: 'Way under' };
+    if (ratio < 0.70) return { bg: '#fde68a', border: '#fcd34d', label: 'Under target' };
+    if (ratio < 1.00) return { bg: '#86efac', border: '#4ade80', label: 'Just right ↓' };
+    if (ratio <= 1.30) return { bg: '#16a34a', border: '#15803d', label: 'On target ✓' };
+    if (ratio <= 1.75) return { bg: '#f97316', border: '#ea580c', label: 'Over target' };
+    return { bg: '#dc2626', border: '#b91c1c', label: 'Way over ↑' };
+}
+
+// ── INSIGHT 1: DANGER DAY ──────────────────────
+function renderDangerDayInsight(logs) {
+    const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const DAY_FULL  = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+    // Sum calories and count log-days per weekday
+    const dayCals  = [0,0,0,0,0,0,0];
+    const dayCount = [0,0,0,0,0,0,0];
+    const seenDates = {};
+
+    logs.forEach(l => {
+        const dow = new Date(l.date + 'T12:00:00').getDay();
+        dayCals[dow] += (l.calories || 0);
+        const key = `${dow}_${l.date}`;
+        if (!seenDates[key]) {
+            seenDates[key] = true;
+            dayCount[dow]++;
+        }
+    });
+
+    // Average calories per-day (only days with data)
+    const avgCals = dayCals.map((c, i) => dayCount[i] > 0 ? Math.round(c / dayCount[i]) : 0);
+    const maxVal   = Math.max(...avgCals, 1);
+    const maxIdx   = avgCals.indexOf(Math.max(...avgCals));
+    const hasDays  = avgCals.some(v => v > 0);
+
+    const heatmap = document.getElementById('dayHeatmap');
+    const badge   = document.getElementById('dangerDayBadge');
+    const callout = document.getElementById('dangerDayCallout');
+
+    if (!heatmap) return;
+
+    heatmap.innerHTML = DAY_NAMES.map((d, i) => {
+        const val     = avgCals[i];
+        const pct     = val > 0 ? Math.round((val / maxVal) * 100) : 0;
+        const isDanger = i === maxIdx && hasDays;
+        return `
+            <div class="heatmap-col">
+                <div class="heatmap-bar-wrap">
+                    <div class="heatmap-bar ${isDanger ? 'danger' : ''}" style="height:${pct}%">
+                        ${isDanger ? '<i class="fa-solid fa-skull-crossbones heatmap-skull"></i>' : ''}
+                    </div>
+                </div>
+                <div class="heatmap-label ${isDanger ? 'danger-label' : ''}">${d}</div>
+                ${val > 0 ? `<div class="heatmap-val">${val >= 1000 ? (val/1000).toFixed(1)+'k' : val}</div>` : ''}
+            </div>
+        `;
+    }).join('');
+
+    if (hasDays) {
+        const calGoal = currentUser.calorie_goal || 2000;
+        const surplusDelta = maxVal - calGoal;
+        const sign = surplusDelta > 0 ? '+' : '';
+        badge.textContent = DAY_FULL[maxIdx];
+        badge.classList.add('danger');
+        callout.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i>
+            <span><strong>${DAY_FULL[maxIdx]}s</strong> average ${maxVal.toLocaleString()} cal — 
+            ${surplusDelta > 0
+                ? `<strong style="color:#ef4444">${sign}${surplusDelta} over goal.</strong> Your biggest risk day.`
+                : `still within goal — you're doing well on ${DAY_FULL[maxIdx]}s.`}
+            </span>`;
+    } else {
+        badge.textContent = '—';
+        badge.classList.remove('danger');
+        callout.innerHTML = `<i class="fa-solid fa-circle-info"></i><span>Log more meals to unlock this insight.</span>`;
+    }
+}
+
+// ── INSIGHT 2: MEAL TIMING BREAKDOWN ──────────────────────
+function renderMealTimingInsight(logs) {
+    const PERIODS = ['breakfast','brunch','lunch','dinner','snack','shortcut'];
+    const EMOJIS  = { breakfast:'☀️', brunch:'🌤️', lunch:'🌞', dinner:'🌙', snack:'🍎', shortcut:'⚡' };
+    const LABELS  = { breakfast:'Breakfast', brunch:'Brunch', lunch:'Lunch', dinner:'Dinner', snack:'Snack', shortcut:'Quick Log' };
+
+    const calsByPeriod = {};
+    PERIODS.forEach(p => calsByPeriod[p] = 0);
+
+    logs.forEach(l => {
+        const type = (l.meal_type || 'snack').toLowerCase();
+        if (!calsByPeriod[type]) calsByPeriod[type] = 0;
+        calsByPeriod[type] += (l.calories || 0);
+    });
+
+    const totalCals = Object.values(calsByPeriod).reduce((a,b) => a + b, 0);
+    const hasTiming = totalCals > 0;
+
+    const timingBars  = document.getElementById('timingBars');
+    const timingBadge = document.getElementById('timingCulpritBadge');
+    const timingCallout = document.getElementById('timingCallout');
+    if (!timingBars) return;
+
+    if (!hasTiming) {
+        timingBars.innerHTML = '';
+        timingBadge.textContent = '—';
+        timingCallout.innerHTML = `<i class="fa-solid fa-circle-info"></i><span>Log meals across different periods to unlock this insight.</span>`;
+        return;
+    }
+
+    // Sort by calories descending
+    const sorted = PERIODS
+        .filter(p => calsByPeriod[p] > 0)
+        .sort((a,b) => calsByPeriod[b] - calsByPeriod[a]);
+
+    const maxPeriodCals = calsByPeriod[sorted[0]] || 1;
+
+    timingBars.innerHTML = sorted.map(p => {
+        const cal  = calsByPeriod[p];
+        const pct  = Math.round((cal / totalCals) * 100);
+        const barW = Math.round((cal / maxPeriodCals) * 100);
+        const isTop = p === sorted[0];
+        return `
+            <div class="timing-bar-row ${isTop ? 'timing-top' : ''}">
+                <div class="timing-period-label">
+                    <span class="timing-emoji">${EMOJIS[p] || '🍽️'}</span>
+                    <span>${LABELS[p] || p}</span>
+                </div>
+                <div class="timing-track">
+                    <div class="timing-fill ${isTop ? 'top' : ''}" style="width:${barW}%"></div>
+                </div>
+                <div class="timing-stats">
+                    <span class="timing-pct ${isTop ? 'top-pct' : ''}">${pct}%</span>
+                    <span class="timing-cal">${cal.toLocaleString()} cal</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    const topPeriod = sorted[0];
+    const topPct    = Math.round((calsByPeriod[topPeriod] / totalCals) * 100);
+    timingBadge.textContent = LABELS[topPeriod] || topPeriod;
+
+    // Generate a sharp insight callout
+    let calloutText;
+    if (topPeriod === 'dinner' && topPct > 40) {
+        calloutText = `<strong>Dinner accounts for ${topPct}% of your calories.</strong> Late eating is your biggest contributor — consider shifting calories earlier.`;
+    } else if (topPeriod === 'snack' && topPct > 25) {
+        calloutText = `<strong>Snacks are ${topPct}% of your intake.</strong> Liquid or untracked calories often hide here — review what counts as a "snack."`;
+    } else if (topPeriod === 'lunch' && topPct > 45) {
+        calloutText = `<strong>Lunch dominates at ${topPct}% of your calories.</strong> Great for front-loading energy — just make sure dinner stays lean.`;
+    } else {
+        calloutText = `<strong>${LABELS[topPeriod]} is your heaviest meal</strong> at ${topPct}% of your total calories logged.`;
+    }
+    timingCallout.innerHTML = `<i class="fa-solid fa-lightbulb"></i><span>${calloutText}</span>`;
+}
+
+// ── INSIGHT 3: TOP CALORIE CULPRITS ──────────────────────
+function renderCulpritInsight(logs) {
+    const calGoal = currentUser.calorie_goal || 2000;
+
+    const culpritList = document.getElementById('culpritList');
+    const macrocalSplit = document.getElementById('macrocalSplit');
+    if (!culpritList) return;
+
+    if (!logs.length) {
+        culpritList.innerHTML = `<div class="insight-callout"><i class="fa-solid fa-circle-info"></i> <span>Log meals to see your top contributors.</span></div>`;
+        if (macrocalSplit) macrocalSplit.style.display = 'none';
+        return;
+    }
+
+    // Aggregate calories per item_name
+    const itemMap = {};
+    logs.forEach(l => {
+        const name = l.item_name || 'Unknown';
+        if (!itemMap[name]) {
+            itemMap[name] = { calories: 0, protein: 0, fat: 0, carbs: 0, count: 0 };
+        }
+        itemMap[name].calories += (l.calories || 0);
+        itemMap[name].protein  += (l.protein || 0);
+        itemMap[name].fat      += (l.fat || 0);
+        itemMap[name].carbs    += (l.carbs || 0);
+        itemMap[name].count++;
+    });
+
+    const sorted = Object.entries(itemMap)
+        .sort((a,b) => b[1].calories - a[1].calories)
+        .slice(0, 5);
+
+    const totalLogged = logs.reduce((acc, l) => acc + (l.calories || 0), 0);
+    const uniqueDays  = new Set(logs.map(l => l.date)).size || 1;
+    const avgDailyCals = totalLogged / uniqueDays;
+    const maxItemCals  = sorted[0]?.[1]?.calories || 1;
+
+    culpritList.innerHTML = sorted.map(([name, stats], idx) => {
+        const pct    = Math.round((stats.calories / totalLogged) * 100);
+        const barPct = Math.round((stats.calories / maxItemCals) * 100);
+        const medals = ['🥇','🥈','🥉','',''];
+        const avgPerDay = (stats.calories / uniqueDays).toFixed(0);
+        return `
+            <div class="culprit-row">
+                <div class="culprit-rank">${medals[idx] || `#${idx+1}`}</div>
+                <div class="culprit-info">
+                    <div class="culprit-name" title="${name}">${name.length > 32 ? name.slice(0,32)+'…' : name}</div>
+                    <div class="culprit-bar-track">
+                        <div class="culprit-bar-fill ${idx === 0 ? 'top' : ''}" style="width:${barPct}%"></div>
+                    </div>
+                </div>
+                <div class="culprit-stats">
+                    <span class="culprit-pct ${idx === 0 ? 'top-pct' : ''}">${pct}%</span>
+                    <span class="culprit-cal">${stats.calories.toLocaleString()} total</span>
+                    <span class="culprit-avg">~${avgPerDay} cal/day</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // Macro-calorie source split
+    const totalProt  = logs.reduce((a,l) => a + (l.protein || 0), 0);
+    const totalFat   = logs.reduce((a,l) => a + (l.fat || 0), 0);
+    const totalCarb  = logs.reduce((a,l) => a + (l.carbs || 0), 0);
+
+    const calFromProt = totalProt * 4;
+    const calFromFat  = totalFat * 9;
+    const calFromCarb = totalCarb * 4;
+    const calFromMacros = calFromProt + calFromFat + calFromCarb || 1;
+
+    const protPct = Math.round((calFromProt / calFromMacros) * 100);
+    const fatPct  = Math.round((calFromFat  / calFromMacros) * 100);
+    const carbPct = Math.round((calFromCarb / calFromMacros) * 100);
+
+    document.getElementById('splitProtein').style.width = protPct + '%';
+    document.getElementById('splitCarbs').style.width   = carbPct + '%';
+    document.getElementById('splitFat').style.width     = fatPct  + '%';
+    document.getElementById('splitProteinPct').textContent = protPct + '%';
+    document.getElementById('splitCarbsPct').textContent   = carbPct + '%';
+    document.getElementById('splitFatPct').textContent     = fatPct  + '%';
+    if (macrocalSplit) macrocalSplit.style.display = 'block';
+}
 
 // ── EXTERNAL CALORIES GAP FILLER ───────────
 async function addExternalCalories() {
