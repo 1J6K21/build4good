@@ -14,7 +14,8 @@
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f app",
-    "docker:cron-logs": "docker compose logs -f cron"
+    "docker:cron-logs": "docker compose logs -f cron",
+    "seed": "node server/seed.js"
   },
   "keywords": [],
   "author": "",

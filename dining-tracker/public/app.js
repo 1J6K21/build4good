@@ -249,21 +249,50 @@ async function searchGlobalFood() {
             const fat = f.foodNutrients.find(n => n.nutrientId === 1004)?.value || 0;
             const carb = f.foodNutrients.find(n => n.nutrientId === 1005)?.value || 0;
             
+            // Calculate grade for search result
+            const { grade, flags } = calculateMealGrade({
+                name: f.description,
+                calories: kcal,
+                protein: pro,
+                fat: fat,
+                carbs: carb,
+                fiber: f.foodNutrients.find(n => n.nutrientId === 1079 || n.nutrientId === 1082 || n.nutrientId === 1084)?.value || 0,
+                sugars: f.foodNutrients.find(n => n.nutrientId === 2000 || n.nutrientId === 2001)?.value || 0,
+                saturated_fat: f.foodNutrients.find(n => n.nutrientId === 1258)?.value || (fat * 0.3)
+            });
+
+            const flagsHtml = (flags || []).map(fl => `
+                <div class="grade-reason-badge type-${fl.type}" 
+                     onclick="event.stopPropagation(); showNutritionalInsight('${fl.text}', '${(fl.reason || '').replace(/'/g, "\\'")}')"
+                     style="font-size: 0.65rem; padding: 3px 10px; cursor: help;">
+                    <i class="fa-solid ${fl.icon}"></i> ${fl.text}
+                    <i class="fa-solid fa-circle-info" style="margin-left: 4px; opacity: 0.7;"></i>
+                </div>
+            `).join('');
+
             return `
-            <div class="card result-item" onclick="logGlobalItemByFdcId(${f.fdcId}, '${f.description.replace(/'/g, "\\'")}')" style="cursor: pointer; padding: 15px; display: flex; justify-content: space-between; align-items: center; transition: transform 0.1s;">
-                <div style="flex: 1;">
-                    <div style="font-weight: 800; font-size: 0.9rem; color: var(--text-1);">${f.description}</div>
-                    <div style="font-size: 0.7rem; color: var(--text-3); text-transform: uppercase; margin-bottom: 8px;">${f.brandName || f.dataType || 'Common Food'}</div>
-                    <div style="display: flex; gap: 12px; font-size: 0.7rem; font-weight: 700; color: var(--text-2);">
-                        <span><strong style="color:var(--primary)">${Math.round(pro)}g</strong> P</span>
-                        <span><strong style="color:var(--primary)">${Math.round(carb)}g</strong> C</span>
-                        <span><strong style="color:var(--primary)">${Math.round(fat)}g</strong> F</span>
+            <div class="card result-item" onclick="logGlobalItemByFdcId(${f.fdcId}, '${f.description.replace(/'/g, "\\'")}')" style="cursor: pointer; padding: 15px; display: flex; flex-direction: column; gap: 10px; transition: transform 0.1s;">
+               <div style="display: flex; justify-content: space-between; align-items: start;">
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div style="font-weight: 800; font-size: 0.95rem; color: var(--text-1);">${f.description}</div>
+                            <div class="item-gpa-badge grade-${grade[0]}">${grade}</div>
+                        </div>
+                        <div style="font-size: 0.7rem; color: var(--text-3); text-transform: uppercase; margin-bottom: 8px;">${f.brandName || f.dataType || 'Common Food'}</div>
+                        <div style="display: flex; gap: 12px; font-size: 0.75rem; font-weight: 700; color: var(--text-2);">
+                            <span><strong style="color:var(--primary)">${Math.round(pro)}g</strong> P</span>
+                            <span><strong style="color:var(--primary)">${Math.round(carb)}g</strong> C</span>
+                            <span><strong style="color:var(--primary)">${Math.round(fat)}g</strong> F</span>
+                        </div>
                     </div>
-                </div>
-                <div style="text-align: right; border-left: 1px solid var(--border); padding-left: 15px; margin-left: 15px;">
-                    <div style="font-weight: 900; color: var(--primary); font-size: 1.3rem; line-height: 1;">${Math.round(kcal)}</div>
-                    <div style="font-size: 0.6rem; color: var(--text-3); font-weight: 800; letter-spacing: 0.05em;">CALORIES</div>
-                </div>
+                    <div style="text-align: right; border-left: 1px solid var(--border); padding-left: 15px; margin-left: 15px;">
+                        <div style="font-weight: 900; color: var(--primary); font-size: 1.4rem; line-height: 1;">${Math.round(kcal)}</div>
+                        <div style="font-size: 0.6rem; color: var(--text-3); font-weight: 800; letter-spacing: 0.05em;">CALORIES</div>
+                    </div>
+               </div>
+               <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                    ${flagsHtml}
+               </div>
             </div>
         `}).join('');
     } catch (e) {
@@ -365,6 +394,13 @@ async function refreshDashboard() {
 
     const date = trackingDate || todayStr();
     const logs = await fetchLogs(date);
+    
+    // Fetch 30-day history for a dynamic "Semester GPA" calculation
+    const monthStart = new Date(new Date(date + 'T12:00:00').getTime() - (29 * 24 * 60 * 60 * 1000));
+    const rangeRes = await authFetch(`${API}/api/user/logs-range?start=${formatDate(monthStart)}&end=${date}`);
+    const rangeData = await rangeRes.json();
+    const historicalLogs = rangeData.logs || [];
+
     currentDayTotals = (logs || []).reduce((acc, l) => {
         acc.cal += (l.calories || 0);
         acc.p += (l.protein || 0);
@@ -502,6 +538,79 @@ async function refreshDashboard() {
     }
 
     try { generateBulletin(logs, totals, calGoal); } catch (e) { console.error(e); }
+    try { updateHealthGPA(logs, historicalLogs); } catch (e) { console.error(e); }
+}
+
+function updateHealthGPA(todayLogs, historicalLogs) {
+    if (!currentUser) return;
+    
+    document.getElementById('gpaMajorDisplay').textContent = `Major: ${currentUser.major || 'Cutting'}`;
+    
+    // 1. Calculate TRUE Overall GPA (30-day average)
+    let hPoints = 0;
+    let hWeight = 0;
+    historicalLogs.forEach(l => {
+        const { points, isExam } = calculateMealGrade(l, currentUser.major, l.logged_at);
+        const w = isExam ? 3 : 1;
+        hPoints += (points * w);
+        hWeight += w;
+    });
+    
+    const overallGPA = hWeight > 0 ? (hPoints / hWeight) : 4.0;
+    document.getElementById('gpaFinal').textContent = overallGPA.toFixed(2);
+
+    if (todayLogs.length === 0) {
+        document.getElementById('gradeNutrition').textContent = '—';
+        document.getElementById('gradeTiming').textContent = '—';
+        document.getElementById('gradeConsistency').textContent = '—';
+        document.getElementById('gpaTrend').innerHTML = '<i class="fa-solid fa-graduation-cap"></i> SEMESTER IN PROGRESS';
+        return;
+    }
+
+    // 2. Calculate Today's GPA
+    let tPoints = 0;
+    let tWeight = 0;
+    let timingPenalty = 0;
+    
+    todayLogs.forEach(l => {
+        const { points, isExam } = calculateMealGrade(l, currentUser.major, l.logged_at);
+        const w = isExam ? 3 : 1;
+        tPoints += (points * w);
+        tWeight += w;
+        if (isExam) timingPenalty += 1;
+    });
+
+    const sessionAvg = tWeight > 0 ? (tPoints / tWeight) : 4.0;
+    const sessionGrade = pointsToGrade(sessionAvg);
+    
+    document.getElementById('gradeNutrition').textContent = sessionGrade;
+    document.getElementById('gradeTiming').textContent = timingPenalty > 1 ? 'D' : (timingPenalty > 0 ? 'B' : 'A');
+
+    // 3. Consistency (Static for now, could be dynamic per day)
+    document.getElementById('gradeConsistency').textContent = 'B'; 
+
+    // 4. Trend: Compare Session vs Overall (Dynamic)
+    const trendEl = document.getElementById('gpaTrend');
+    const diff = sessionAvg - overallGPA;
+    
+    if (Math.abs(diff) < 0.2) {
+        trendEl.innerHTML = '<i class="fa-solid fa-graduation-cap"></i> TODAY: Performance stable';
+        trendEl.className = 'gpa-trend';
+    } else if (diff > 0) {
+        trendEl.innerHTML = '<i class="fa-solid fa-caret-up"></i> TODAY: Session performance high';
+        trendEl.className = 'gpa-trend';
+    } else {
+        trendEl.innerHTML = '<i class="fa-solid fa-caret-down"></i> TODAY: Session below average';
+        trendEl.className = 'gpa-trend down';
+    }
+}
+
+function pointsToGrade(pts) {
+    if (pts >= 4.0) return 'A';
+    if (pts >= 3.0) return 'B';
+    if (pts >= 2.0) return 'C';
+    if (pts >= 1.0) return 'D';
+    return 'F';
 }
 
 function generateBulletin(logs, totals, calGoal) {
@@ -1222,60 +1331,164 @@ function toggleSpotlight() {
     if (spotlightActive) toast("Spotlight active: Highlighting the best options for your goals.");
 }
 
+function gradeToPoints(grade) {
+    const map = { 'A+': 4.3, 'A': 4.0, 'A-': 3.7, 'B+': 3.3, 'B': 3.0, 'B-': 2.7, 'C+': 2.3, 'C': 2.0, 'C-': 1.7, 'D': 1.0, 'F': 0.0 };
+    return map[grade] || 0;
+}
+
+function calculateMealGrade(item, major, timestamp = Date.now()) {
+    const { score, flags } = scoreFoodItem(item); 
+    
+    // 1. Determine Exam Status
+    const hour = new Date(timestamp).getHours();
+    const isLateNight = hour >= 21 || hour < 5;
+    const isExam = isLateNight; 
+    const examType = isLateNight ? 'Late Night Exam' : '';
+
+    // 2. Map Score (Pure Health) to Grade
+    let grade = 'C';
+    if (score >= 35) grade = 'A+';
+    else if (score >= 25) grade = 'A';
+    else if (score >= 18) grade = 'A-';
+    else if (score >= 12) grade = 'B+';
+    else if (score >= 6) grade = 'B';
+    else if (score >= 1) grade = 'B-';
+    else if (score >= -3) grade = 'C+';
+    else if (score >= -8) grade = 'C';
+    else if (score >= -15) grade = 'C-';
+    else if (score >= -25) grade = 'D';
+    else grade = 'F';
+
+    return { grade, isExam, examType, points: gradeToPoints(grade), flags: flags || [] };
+}
+
 function scoreFoodItem(item) {
-    if (!currentUser) return { score: 0, type: 'neutral' };
+    if (!item) return { score: 0, type: 'neutral', flags: [] };
 
-    const pro = item.protein || 0;
-    const fib = item.fiber || 0;
-    const cal = item.calories || 0;
-    const sugar = item.sugars || 0;
-    const satFat = item.saturated_fat || 0;
+    // 0. SANITIZE INPUTS (Fixes the rendering crash)
+    const name = (item.item_name || item.name || '').toLowerCase();
+    const major = (currentUser?.major || 'General Health').toLowerCase();
 
-    // 1. Heuristic Identity Check (Topping vs. Meal)
-    // A 'Modifier' (topping) is typically low calorie OR high density in small volume
-    // We detect it by calorie count (< 80) or specific keywords
-    const toppingKeywords = [
-        'sauce', 'dressing', 'topping', 'condiment', 'butter', 'oil', 
-        'mayo', 'mustard', 'relish', 'onion', 'olive', 'pickles', 'salsa', 
-        'jalapeno', 'crouton', 'seeds', 'nuts', 'vinaigrette', 'pesto', 'hummus',
-        'guacamole', 'sour cream', 'bacon bits', 'cilantro', 'garlic', 'cheese'
-    ];
-    const isModifierHeuristic = (cal < 80 && pro < 12) || toppingKeywords.some(k => item.name.toLowerCase().includes(k));
+    // 0. SANITIZE INPUTS & MAJOR-AWARE SCALING
+    const pro = parseFloat(item.protein || item.p) || 0;
+    const fib = parseFloat(item.fiber || item.fib) || 0;
+    const cal = parseFloat(item.calories || item.cal) || 0;
+    const fat = parseFloat(item.fat || item.f) || 0;
+    const carbs = parseFloat(item.carbs || item.carb || item.c) || 0;
+    const sugar = parseFloat(item.sugars || item.sugar || item.sug) || 0;
+    const satFat = parseFloat(item.saturated_fat || item.satFat || item.sat) || 0;
+    const sodium = parseFloat(item.sodium || item.na) || 0;
 
-    // 2. Adaptive Weights based on what the user NEEDS
-    const goals = { 
-        cal: currentUser.calorie_goal || 2000, 
-        p: currentUser.protein_goal || 60
-    };
-    const remaining = {
-        cal: goals.cal - currentDayTotals.cal,
-        p: Math.max(0, goals.p - currentDayTotals.p)
-    };
+    // Bulking Major Buff: High-calorie items are less penalized
+    let calWeight = cal < 250 ? 0.12 : 0.45;
+    if (major === 'bulking' && cal > 400 && pro > 20) calWeight = 0.18; 
+    
+    // 1. DATA PREP
+    const pDensity = (pro * 4) / Math.max(cal, 1);
+    const pPct = (pro * 4) / Math.max(cal, 1); // For checks
+    const calDensity = cal / 500; // Relative to a standard meal
+    const satFatRatio = satFat / Math.max(fat, 1);
+    const sodiumDensity = sodium / Math.max(cal, 1);
+    const sugarDensity = (sugar * 4) / Math.max(cal, 1);
 
-    let proWeight = remaining.p > 40 ? 6 : 3;
-    let calPenaltyWeight = remaining.cal < 400 ? 0.25 : 0.05;
+    const produceKeywords = ['tomato', 'broccoli', 'spinach', 'kale', 'apple', 'banana', 'orange', 'fruit', 'berry', 'berries', 'carrot', 'cucumber', 'pepper', 'lettuce', 'cabbage', 'vegetable', 'salad', 'onion', 'corn', 'ginger', 'garlic', 'bean', 'brussels', 'sprout', 'hash', 'potato', 'mushroom', 'pepper'];
+    const proteinKeywords = ['egg', 'chicken', 'turkey', 'tofu', 'salmon', 'fish', 'beef', 'steak', 'pork', 'sausage', 'omelet', 'poached', 'scrambled'];
+    
+    const ingredients = (item.ingredients || '').toLowerCase();
+    const isProduce = produceKeywords.some(k => name.includes(k)) && cal < 500 && sugar < 25;
+    const isWholeProtein = proteinKeywords.some(k => name.includes(k)) && cal < 700;
 
-    // Base nutritional score
-    let score = (pro * proWeight) + (fib * 5) - (cal * calPenaltyWeight) - (sugar * 2) - (satFat * 3);
+    // 1.1 DATA-DRIVEN PROCESSING CHECK (The "Ingredient List" Fix)
+    let processingPenalty = 0;
+    const processTriggers = ['syrup', 'bleached', 'enriched', 'hydrogenated', 'modified', 'carra', 'nitrate', 'isolate', 'refined', 'artificial', 'msg', 'natural flavor', 'gum', 'sucralose', 'aspartame'];
+    const hits = processTriggers.filter(t => ingredients.includes(t) || name.includes('sandwich') || name.includes('burger'));
+    if (hits.length > 1) {
+        processingPenalty = hits.length * 10;
+    }
+
+    // 2. THE AGNOSTIC HEALTH FORMULA
+    let score = 0;
+    let flags = [];
+
+    // A. Anchoring (Produce Protection)
+    if (isProduce) {
+        score = 25; // Base A
+        if (cal < 120) score = 40; // A+ for fillers
+        if (cal < 40) flags.push({ text: 'Low Cal Filler', icon: 'fa-leaf', type: 'good' });
+    } else {
+        // High-Quality Protein base
+        score = (pro * 4.5) + (fib * 12);
+    }
+
+    // B. The Penalties (Scale per calorie more reasonably)
+    score -= (cal * calWeight);
+    score -= processingPenalty;
+    
+    // Sodium & Fat
+    score -= (sodium / 25);
+    score -= (satFat * (isWholeProtein ? 5 : 22)); // 4x penalty for industrial sat-fat vs natural meat/egg fat
+
+    // C. The Efficiency Buffs (The Egg/Steak Savior)
+    // Low-carb protein efficiency is the ultimate metabolic win
+    const carbDensity = (carbs * 4) / Math.max(cal, 1);
+    if (pDensity > 0.20 && (carbDensity < 0.25 || cal < 250)) {
+        score += 35; // Significant boost for metabolic efficiency (Eggs are 0.26 P, <0.1 C)
+        flags.push({ text: 'Metabolic Win', icon: 'fa-bolt', type: 'good' });
+    }
+    if (fib > 3) {
+        score += 20; 
+        flags.push({ text: 'Fiber Rich', icon: 'fa-shield-heart', type: 'good' });
+    }
+
+    // D. Insight Flags (BIO-INHERENT SIGNALING)
+    if (hits.length > 1) {
+        flags.push({ 
+            text: 'Industrial Ingredients', 
+            icon: 'fa-industry', 
+            type: 'danger',
+            reason: `Detected additives: ${hits.join(', ')}.`
+        });
+    }
+    if (sugarDensity > 0.45) {
+        score -= 25;
+        flags.push({ 
+            text: 'Sugar Loaded', 
+            icon: 'fa-ice-cream', 
+            type: 'danger',
+            reason: "Over 45% of calories come from simple sugars, causing high glycemic load." 
+        });
+    }
+    if (satFatRatio > 0.70 && !isWholeProtein) {
+         score -= 25;
+         flags.push({ 
+            text: 'Heavy Saturated Fat', 
+            icon: 'fa-bottle-droplet', 
+            type: 'warn',
+            reason: "Contains a high ratio of saturated lipids common in industrial oils."
+         });
+    }
+    if (flags.find(f => f.text === 'Metabolic Win')) {
+        flags.find(f => f.text === 'Metabolic Win').reason = "High protein and low carb density creates a metabolically efficient profile.";
+    }
+    if (flags.find(f => f.text === 'Low Cal Filler')) {
+        flags.find(f => f.text === 'Low Cal Filler').reason = "Extremely low calorie density allows for high volume satiety.";
+    }
 
     // 3. Classification
     let type = 'neutral';
-    
-    if (isModifierHeuristic) {
-        // High-quality modifiers (low sugar/satfat) stay green but don't become "Top Picks"
-        if (score > 2) type = 'modifier-good';
+    const isModifier = cal < 100 && pro < 8 && !name.includes('egg');
+
+    if (isModifier) {
+        if (score > 10) type = 'modifier-good';
         else if (score < -5) type = 'modifier-bad';
         else type = 'modifier-neutral';
-        
-        // Boost modifiers so they aren't dimmed unnecessarily
-        score = Math.max(-5, Math.min(score, 5)); 
+        score = Math.max(-10, Math.min(score, 10)); // Flatten modifiers
     } else {
-        // Main meals
         if (score >= 12) type = 'meal-top';
-        else if (score < -10) type = 'meal-heavy';
+        else if (score < -15) type = 'meal-heavy';
     }
 
-    return { score, type };
+    return { score, type, flags };
 }
 
 function getSpotlightHtml(stations, waitStats, locSlug) {
@@ -1364,6 +1577,9 @@ function renderItem(item, isSpotlight) {
     let spotlightClass = '';
     let spotlightBadge = '';
     
+    // Calculate grade for display
+    const { grade, isExam } = calculateMealGrade(item, (currentUser ? currentUser.major : 'Cutting'));
+
     if (isSpotlight) {
         if (item._type === 'meal-top') {
             spotlightClass = 'spotlight-highlight';
@@ -1382,7 +1598,10 @@ function renderItem(item, isSpotlight) {
     return `
     <div class="menu-item ${isSelected ? 'selected' : ''} ${spotlightClass}" id="item-${item.name.replace(/\s+/g, '-')}" onclick="toggleItem(this, ${JSON.stringify(item).replace(/"/g, '&quot;')})">
         ${spotlightBadge}
-        <div class="item-name">${item.name}</div>
+        <div style="display: flex; align-items: flex-start; gap: 10px;">
+            <div class="item-name">${item.name}</div>
+            <div class="item-gpa-badge grade-${grade[0]}">${grade}</div>
+        </div>
         <div class="item-badges">
             ${(item.badges || []).map(b => `<span class="badge badge-${b}">${b}</span>`).join('')}
         </div>
@@ -1410,38 +1629,24 @@ function renderItem(item, isSpotlight) {
 }
 
 function getItemFlags(item) {
-    const flags = [];
-    const cal = item.calories || 0;
-    const pro = item.protein || 0;
-    const fat = item.fat || 0;
-    const fib = item.fiber || 0;
-    const sodium = item.sodium || 0;
-    const sugar = item.sugars || 0;
+    const { flags } = calculateMealGrade(item, 'General');
+    if (!flags || flags.length === 0) return '';
+    
+    return `<div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px;">
+        ${flags.map(fl => `
+            <div class="grade-reason-badge type-${fl.type}" 
+                 onclick="event.stopPropagation(); showNutritionalInsight('${fl.text}', '${(fl.reason || '').replace(/'/g, "\\'")}')"
+                 style="font-size: 0.65rem; padding: 3px 10px; cursor: help;">
+                <i class="fa-solid ${fl.icon}"></i> ${fl.text}
+                <i class="fa-solid fa-circle-info" style="margin-left: 4px; opacity: 0.7;"></i>
+            </div>
+        `).join('')}
+    </div>`;
+}
 
-    // Red: only flag genuinely poor nutritional trade-offs
-    // High cal with low protein AND low fiber = empty calories
-    const isHighProtein = pro >= 15;
-    if (
-        cal >= 500 ||                                         // Just huge
-        (cal >= 350 && !isHighProtein && fib < 2) ||          // Big & nutritionally empty
-        (sodium >= 900 && !isHighProtein) ||                  // Super salty without protein payoff
-        (fat >= 18 && sugar >= 12)                            // Dessert-style fat+sugar bomb
-    ) {
-        flags.push('<span class="flag-badge flag-red"><i class="fa-solid fa-triangle-exclamation"></i> Heavy Gainer — Recommended: &lt;2x/week</span>');
-    }
-
-    // Green: calorie-notable but nutritionally sparse (skip-worthy)
-    if (cal >= 150 && pro < 8 && fib < 2 && fat >= 5) {
-        flags.push('<span class="flag-badge flag-green"><i class="fa-solid fa-forward-step"></i> Easy to skip — Low nutrient density</span>');
-    }
-
-    // Purple: great source of a nutrient the user may be skimping on
-    if (pro >= 20 || fib >= 4) {
-        const nutrient = pro >= 20 ? 'protein' : 'fiber';
-        flags.push(`<span class="flag-badge flag-purple"><i class="fa-solid fa-wand-magic-sparkles"></i> Rich in ${nutrient} — don't miss this one</span>`);
-    }
-
-    return flags.length ? `<div class="item-flags">${flags.join('')}</div>` : '';
+function showNutritionalInsight(title, reason) {
+    if (!reason) return;
+    toast(`<strong>${title}</strong><br/>${reason}`);
 }
 
 function toggleItem(el, item) {
@@ -1595,9 +1800,12 @@ function renderNegotiator(totalPct) {
             <div class="negotiator-stat"><i class="fa-solid fa-person-walking"></i> <span>Or <strong>${walkMiles} miles</strong> walking</span></div>
             <div class="negotiator-stat"><i class="fa-solid fa-burger"></i> <span>Calorie equivalent: <strong>${Math.max(1, Math.round((maxCal/350)*10)/10)} burgers</strong></span></div>
         </div>
-        <div class="negotiator-swap">
-            <span class="negotiator-swap-text">🤝 ${swapMsg}</span>
-            <button class="negotiator-swap-btn" onclick="applySwap('${trapItem.name.replace(/'/g, "\\'")}')">Smarter Swap</button>
+        <div class="negotiator-swap" style="background: rgba(245, 158, 11, 0.1); border: 2px dashed var(--amber); padding: 15px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; margin-top: 20px;">
+            <div style="font-weight: 700; color: #92400e;">🤝 ${swapMsg}</div>
+            <button class="btn btn-sm" onclick="applySwap('${trapItem.name.replace(/'/g, "\\'")}')" 
+                style="background: var(--amber); color: white; font-weight: 950; letter-spacing: 0.05em; padding: 10px 18px; border-radius: 100px; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);">
+                <i class="fa-solid fa-graduation-cap"></i> EARN EXTRA CREDIT
+            </button>
         </div>
     `;
 }
@@ -1901,8 +2109,10 @@ function onNavDateChange(newDate) {
 
 function toast(msg) {
     const t = document.getElementById('toast');
-    t.textContent = msg; t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 3000);
+    if (!t) return;
+    t.innerHTML = msg; 
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 4000);
 }
 
 function openGoalsModal() {
@@ -3881,3 +4091,278 @@ async function deleteExperimentLog(expId, logId) {
         toast('Failed to delete log');
     }
 }
+
+// ── SHAREABLE REPORT CARD ────────────────────────────
+
+async function openReportCardModal(forcedLogs = null, forcedRangeStr = null, isSingleDay = false) {
+    if (!currentUser) return;
+    
+    try {
+        const date = trackingDate || todayStr();
+        const logs = forcedLogs || (await fetchLogs(date)) || [];
+        
+        console.log('[ReportCard] Generating with logs count:', logs.length);
+    
+    // 1. Basic Info
+    document.getElementById('reportUserName').textContent = (currentUser.name || 'STUDENT').toUpperCase();
+    document.getElementById('reportMajor').textContent = (currentUser.major || 'GENERAL HEALTH').toUpperCase();
+    
+    // 2. Date Range
+    if (forcedRangeStr) {
+        document.getElementById('reportDateRange').textContent = forcedRangeStr;
+    } else {
+        const d = new Date(date + 'T12:00:00');
+        const startStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
+        document.getElementById('reportDateRange').textContent = `${startStr} - ${startStr}, 2026`;
+    }
+    
+    // 3. GPA & Grades
+    const calGoal = currentUser.calorie_goal || 2000;
+    
+    const totals = (logs || []).reduce((acc, l) => {
+        acc.cal += (l.calories || 0);
+        acc.p += (l.protein || 0);
+        acc.f += (l.fat || 0);
+        acc.c += (l.carbs || 0);
+        return acc;
+    }, { cal: 0, p: 0, f: 0, c: 0 });
+
+    let totalPoints = 0;
+    let totalWeight = 0;
+    let nutritionScore = 0;
+    let timingPenalty = 0;
+    
+    const gradedLogs = logs.map(l => {
+        const { grade, points, isExam, examType } = calculateMealGrade(l, currentUser.major, l.logged_at);
+        const weight = isExam ? 3 : 1;
+        totalPoints += (points * weight);
+        totalWeight += weight;
+        nutritionScore += points;
+        if (isExam) timingPenalty += 1;
+        return { ...l, grade, points, isExam, examType };
+    });
+
+    // ── HONEST PERIOD CALCULATION ──
+    // We calculate the GPA purely from the logs provided for this period.
+    const finalGpaVal = totalWeight > 0 ? (totalPoints / totalWeight) : (parseFloat(currentUser.gpa) || 4.0);
+    const finalGpaStr = finalGpaVal.toFixed(2);
+    
+    // Display GPA with animation
+    const gpaEl = document.getElementById('reportGpaValue');
+    animateGpaValue(gpaEl, 0, finalGpaVal, 1000);
+    
+    const gpaLetter = pointsToGrade(finalGpaVal);
+    document.getElementById('reportGpaLetter').textContent = gpaLetter;
+    
+    // Status based on GPA
+    let status = 'SATISFACTORY';
+    if (finalGpaVal >= 3.8) status = "DEAN'S LIST";
+    else if (finalGpaVal >= 3.4) status = 'HONOR ROLL';
+    else if (finalGpaVal < 2.0) status = 'ACADEMIC PROBATION';
+    document.getElementById('reportGpaStatus').textContent = status;
+    
+    // Trend Indicator
+    const trendEl = document.getElementById('reportGpaTrend');
+    const diffModal = finalGpaVal - (parseFloat(currentUser.gpa) || 3.42);
+    
+    if (Math.abs(diffModal) < 0.1) {
+        trendEl.innerHTML = '<i class="fa-solid fa-graduation-cap"></i> PERFORMANCE STABLE';
+        trendEl.style.color = '#333';
+    } else if (diffModal > 0) {
+        trendEl.innerHTML = '<i class="fa-solid fa-arrow-trend-up"></i> TRENDING ABOVE AVG';
+        trendEl.style.color = '#166534';
+    } else {
+        trendEl.innerHTML = '<i class="fa-solid fa-arrow-trend-down"></i> TRENDING BELOW AVG';
+        trendEl.style.color = '#991b1b';
+    }
+    
+    // 4. Detailed Results
+    const nutritionAvg = logs.length > 0 ? nutritionScore / logs.length : 4.0;
+    const nutrGrade = pointsToGrade(nutritionAvg);
+    document.getElementById('reportNutrResult').textContent = `${Math.round(Math.min(100, (nutritionAvg / 4) * 100))}/100`;
+    document.getElementById('reportNutrGrade').textContent = nutrGrade;
+    document.getElementById('reportNutrGrade').style.background = getGradeColor(nutrGrade);
+    document.getElementById('reportNutrGrade').style.color = 'white';
+
+    const timingGrade = timingPenalty > 1 ? 'D' : (timingPenalty > 0 ? 'B' : 'A');
+    document.getElementById('reportTimingResult').textContent = timingPenalty > 0 ? `${timingPenalty} IRREGULARITY` : 'OPTIMAL';
+    document.getElementById('reportTimingGrade').textContent = timingGrade;
+    document.getElementById('reportTimingGrade').style.background = getGradeColor(timingGrade);
+    document.getElementById('reportTimingGrade').style.color = 'white';
+
+    const pGoal = currentUser.protein_goal || 100;
+    const pDiff = Math.abs(totals.p - pGoal) / pGoal;
+    const consGrade = pDiff < 0.15 ? 'A' : (pDiff < 0.3 ? 'B' : 'C');
+    document.getElementById('reportConsResult').textContent = `±${Math.round(pDiff * 100)}% VAR`;
+    document.getElementById('reportConsGrade').textContent = consGrade;
+    document.getElementById('reportConsGrade').style.background = getGradeColor(consGrade);
+    document.getElementById('reportConsGrade').style.color = 'white';
+
+    const discGrade = finalGpaVal >= 3.0 ? 'A' : (finalGpaVal >= 2.0 ? 'B' : 'C');
+    document.getElementById('reportDiscGrade').textContent = discGrade;
+    document.getElementById('reportDiscGrade').style.background = getGradeColor(discGrade);
+    document.getElementById('reportDiscGrade').style.color = 'white';
+
+    // 5. Ledger (Key Events)
+    const ledgerEl = document.getElementById('reportLedger');
+    ledgerEl.innerHTML = gradedLogs.slice(0, 6).map(l => `
+        <div class="ledger-item">
+            <div class="ledger-time">${new Date(l.logged_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+            <div class="ledger-event">${(l.item_name || l.name || 'Meal').substring(0, 18)}</div>
+            <div class="ledger-grade">${l.grade}</div>
+        </div>
+    `).join('') || '<div class="empty-extra" style="padding: 20px 0;">No activity logged today.</div>';
+
+    // 6. Extra Credit (Smart Swaps)
+    const extraEl = document.getElementById('reportExtraCredit');
+    const produceItems = logs.filter(l => {
+        const n = (l.item_name || l.name || '').toLowerCase();
+        return n.includes('fruit') || n.includes('salad') || n.includes('broccoli') || n.includes('spinach') || n.includes('apple') || n.includes('banana');
+    });
+    
+    if (produceItems.length > 0) {
+        extraEl.innerHTML = produceItems.slice(0, 2).map(i => {
+            const displayName = (i.item_name || i.name || 'Produce').toUpperCase();
+            return `
+            <div class="extra-item">
+                <span class="extra-name">SWAP: ${displayName.substring(0, 22)}</span>
+                <span class="extra-points">+0.05 GPA</span>
+            </div>
+            `;
+        }).join('');
+    } else if (finalGpaVal >= 3.5 && logs.length > 0) {
+        extraEl.innerHTML = `
+            <div class="extra-item">
+                <span class="extra-name">ADHERENCE BONUS</span>
+                <span class="extra-points">+0.10 GPA</span>
+            </div>
+        `;
+    } else {
+        extraEl.innerHTML = '<div class="empty-extra">No extra credit recorded this period.</div>';
+    }
+
+    // 7. Reflection
+    const reflectionEl = document.getElementById('reportReflection');
+    reflectionEl.textContent = generatePersonalReflection(finalGpaVal, timingPenalty, produceItems.length);
+
+    // 8. ID
+    document.getElementById('reportId').textContent = Math.random().toString(36).substring(2, 10).toUpperCase();
+
+    // Show Modal
+    const backdrop = document.getElementById('reportCardModalBackdrop');
+    if (backdrop) backdrop.style.display = 'flex';
+    
+    } catch (e) {
+        console.error('[ReportCard] Error generating modal:', e);
+        toast('Failed to load report card data.');
+    }
+}
+
+async function openReportCardModalWithSettings() {
+    if (!currentUser) return;
+    const period = document.getElementById('reportPeriodSelect').value;
+    const endDate = trackingDate || todayStr();
+    let startDate = endDate;
+    let rangeStr = "";
+
+    toast('Analyzing Historical Trends...');
+
+    if (period === 'max') {
+        startDate = '2025-01-01'; 
+        rangeStr = "ALL TIME HISTORY";
+    } else {
+        const days = parseInt(period);
+        const d = new Date(endDate + 'T12:00:00');
+        d.setDate(d.getDate() - (days - 1));
+        startDate = formatDate(d);
+    }
+
+    try {
+        const res = await authFetch(`${API}/api/user/logs-range?start=${startDate}&end=${endDate}`);
+        const data = await res.json();
+        const logs = data.logs || [];
+        
+        if (!rangeStr) {
+            const s = new Date(startDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
+            const e = new Date(endDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
+            rangeStr = `${s} - ${e}, 2026`;
+        }
+        
+        openReportCardModal(logs, rangeStr, (period === '1' || !period));
+    } catch (e) {
+        console.error(e);
+        toast('Failed to fetch historical range.');
+    }
+}
+
+function animateGpaValue(obj, start, end, duration) {
+    let startTimestamp = null;
+    const step = (timestamp) => {
+        if (!startTimestamp) startTimestamp = timestamp;
+        const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+        obj.textContent = (progress * (end - start) + start).toFixed(2);
+        if (progress < 1) {
+            window.requestAnimationFrame(step);
+        }
+    };
+    window.requestAnimationFrame(step);
+}
+
+function getGradeColor(grade) {
+    if (grade.startsWith('A')) return '#166534';
+    if (grade.startsWith('B')) return '#1e40af';
+    if (grade.startsWith('C')) return '#854d0e';
+    return '#991b1b';
+}
+
+function generatePersonalReflection(gpa, timingPenalty, produceCount) {
+    if (gpa >= 3.7) {
+        return `"My consistency has been a major highlight this period. By prioritizing high-protein and nutrient-dense options, I've managed to stay well within my target zones while fueling effectively for my ${(currentUser.major || 'health').toLowerCase()} goals. The extra credit produce swaps are paying off."`;
+    } else if (gpa >= 3.0) {
+        let msg = `"I'm generally on the right track, but slight deviations in `;
+        if (timingPenalty > 0) msg += 'meal timing and late-night intake ';
+        else msg += 'macro balance ';
+        msg += `are capping my performance potential. A few more smart swaps and tighter consistency in the afternoon will be key to reaching Dean's List status."`;
+        return msg;
+    } else {
+        return `"This has been a challenging week for my nutritional habits. My ledger shows several entries that don't align with my ${(currentUser.major || 'health').toLowerCase()} major. I need to focus on logging higher quality whole foods and reducing late-night calorie spikes to recover my GPA."`;
+    }
+}
+
+function closeReportCardModal() {
+    document.getElementById('reportCardModalBackdrop').style.display = 'none';
+}
+
+function exportReportAsImage() {
+    const element = document.getElementById('exportableReport');
+    const originalShadow = element.style.boxShadow;
+    element.style.boxShadow = 'none'; // Remove shadow for clean export
+    
+    toast('Preparing high-res snapshot...');
+    
+    html2canvas(element, {
+        scale: 3, // Very high res for sharing
+        useCORS: true,
+        backgroundColor: '#fdfdfb',
+        logging: false,
+        onclone: (clonedDoc) => {
+            // Ensure icons are visible in clone if needed
+            const report = clonedDoc.getElementById('exportableReport');
+            report.style.boxShadow = 'none';
+        }
+    }).then(canvas => {
+        element.style.boxShadow = originalShadow;
+        const link = document.createElement('a');
+        link.download = `Mindful_Macros_Report_${new Date().toISOString().split('T')[0]}.png`;
+        link.href = canvas.toDataURL('image/png', 1.0);
+        link.click();
+        toast('Transcript downloaded! 🎓');
+    }).catch(err => {
+        console.error('Export failed', err);
+        toast('Export failed. Try again.');
+        element.style.boxShadow = originalShadow;
+    });
+}
+
+// ── End of Mindful Macros Application Logic ──
+

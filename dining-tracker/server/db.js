@@ -26,6 +26,8 @@ db.exec(`
     height INTEGER,
     weight INTEGER,
     tracked_nutrients TEXT DEFAULT '[]',
+    major TEXT DEFAULT 'Cutting',
+    gpa REAL DEFAULT 4.0,
     created_at INTEGER
   );
 
@@ -48,6 +50,9 @@ db.exec(`
     trans_fat INTEGER DEFAULT 0,
     cholesterol INTEGER DEFAULT 0,
     logged_at INTEGER,
+    grade TEXT,
+    is_exam INTEGER DEFAULT 0,
+    is_extra_credit INTEGER DEFAULT 0,
     FOREIGN KEY(user_id) REFERENCES users(id)
   );
 
@@ -336,14 +341,16 @@ function upsertFoodItem(item) {
   `).run(item.name, item.calories, item.protein, item.fat, item.carbs, item.sodium || 0, item.fiber || 0, item.sugar || 0, item.sugars || 0, item.saturated_fat || 0, item.trans_fat || 0, item.cholesterol || 0, Date.now());
 }
 
-function addMealLog(userId, date, mealType, itemName, calories, servingSize, p = 0, f = 0, c = 0, na = 0, fib = 0, sug = 0, sat = 0, trans = 0, chol = 0) {
+function addMealLog(userId, date, mealType, itemName, calories, servingSize, p = 0, f = 0, c = 0, na = 0, fib = 0, sug = 0, sat = 0, trans = 0, chol = 0, loggedAt = null, grade = null, isExam = 0, isExtraCredit = 0) {
   let ss = parseFloat(servingSize);
   if (isNaN(ss) || ss <= 0) ss = 1.0;
   
+  const now = loggedAt || Date.now();
+  
   db.prepare(`
-    INSERT INTO meal_logs (user_id, date, meal_type, item_name, calories, serving_size, protein, fat, carbs, sodium, fiber, sugar, sugars, saturated_fat, trans_fat, cholesterol, logged_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(userId, date, mealType, itemName, calories, ss, p, f, c, na, fib, sug, sug, sat, trans, chol, Date.now());
+    INSERT INTO meal_logs (user_id, date, meal_type, item_name, calories, serving_size, protein, fat, carbs, sodium, fiber, sugar, sugars, saturated_fat, trans_fat, cholesterol, logged_at, grade, is_exam, is_extra_credit)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(userId, date, mealType, itemName, calories, ss, p, f, c, na, fib, sug, sug, sat, trans, chol, now, grade, isExam, isExtraCredit);
 }
 
 function getMealLogs(userId, date) {
