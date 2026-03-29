@@ -11,7 +11,8 @@ const {
     cleanupMenus, getShortcuts, saveShortcut, updateMacroGoals,
     updateUserStats, updateTrackedNutrients, updateUserNutrients, updateUserGoals,
     addWaitTime, getWaitTimeStats, getWaitTimeStatsAll, clearStaleJobs,
-    getLeaderboard
+    getLeaderboard, findDiningTwin, getExperiments, createExperiment,
+    updateExperimentStatus, getExperimentLogs, addExperimentLog
 } = require('./db');
 
 // Run DB cleanup on startup
@@ -186,6 +187,13 @@ app.get('/api/leaderboard', async (req, res) => {
     res.json({ leaderboard });
 });
 
+app.get('/api/mirror', authenticateToken, async (req, res) => {
+    const days = parseInt(req.query.days || '30');
+    const result = findDiningTwin(req.user.id, days);
+    if (!result) return res.json({ twin: null });
+    res.json(result);
+});
+
 // Wait Times API (Shared)
 app.get('/api/locations/:slug/wait-time', async (req, res) => {
     const stats = await getWaitTimeStatsAll(req.params.slug);
@@ -197,6 +205,33 @@ app.post('/api/locations/:slug/wait-time', authenticateToken, async (req, res) =
     await addWaitTime(req.user.id, req.params.slug, stationName, seconds);
     const stats = await getWaitTimeStatsAll(req.params.slug);
     res.json({ success: true, stats });
+});
+
+// Experiments API
+app.get('/api/user/experiments', authenticateToken, async (req, res) => {
+    const experiments = getExperiments(req.user.id);
+    for (let exp of experiments) {
+        exp.logs = getExperimentLogs(exp.id);
+    }
+    res.json({ experiments });
+});
+
+app.post('/api/user/experiments', authenticateToken, async (req, res) => {
+    const { title, durationDays, startDate } = req.body;
+    const id = createExperiment(req.user.id, title, durationDays, startDate);
+    res.json({ success: true, id });
+});
+
+app.post('/api/user/experiments/:id/status', authenticateToken, async (req, res) => {
+    const { status } = req.body;
+    updateExperimentStatus(req.params.id, req.user.id, status);
+    res.json({ success: true });
+});
+
+app.post('/api/user/experiments/:id/logs', authenticateToken, async (req, res) => {
+    const { date, weight, hungerLevel, consistency, notes } = req.body;
+    addExperimentLog(req.params.id, date, weight, hungerLevel, consistency, notes);
+    res.json({ success: true });
 });
 
 // Existing Menu Data Routes

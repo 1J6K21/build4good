@@ -140,7 +140,33 @@ try {
   db.prepare("ALTER TABLE meal_logs ADD COLUMN cholesterol INTEGER DEFAULT 0").run();
 } catch (e) { }
 
-// Food Items Migrations
+// Wait Times Migrations
+try {
+  db.prepare("ALTER TABLE wait_times ADD COLUMN station_name TEXT NOT NULL DEFAULT 'Unknown'").run();
+} catch (e) { }
+
+// Experiments Support
+db.exec(`
+  CREATE TABLE IF NOT EXISTS experiments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    duration_days INTEGER NOT NULL,
+    start_date TEXT NOT NULL,
+    status TEXT DEFAULT 'active'
+  );
+
+  CREATE TABLE IF NOT EXISTS experiment_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    experiment_id INTEGER NOT NULL,
+    date TEXT NOT NULL,
+    weight REAL,
+    hunger_level INTEGER,
+    consistency INTEGER,
+    notes TEXT,
+    FOREIGN KEY(experiment_id) REFERENCES experiments(id)
+  );
+`);
 try {
   db.prepare("ALTER TABLE food_items ADD COLUMN sodium INTEGER DEFAULT 0").run();
 } catch (e) { }
@@ -375,6 +401,197 @@ function getLeaderboard(itemName) {
   `).all(`%${itemName.toLowerCase()}%`);
 }
 
+// ── DINING TWIN ───────────────────────────────────
+function findDiningTwin(userId, days = 30) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+  // Compute per-user macro averages over the last N days
+  const allUserStats = db.prepare(`
+    SELECT
+      ml.user_id,
+      u.name,
+      u.email,
+      u.picture,
+      AVG(ml.calories)  as avg_cal,
+      AVG(ml.protein)   as avg_protein,
+      AVG(ml.fat)       as avg_fat,
+      AVG(ml.carbs)     as avg_carbs,
+      COUNT(*)          as log_count
+    FROM meal_logs ml
+    JOIN users u ON ml.user_id = u.id
+    WHERE ml.date >= ?
+    GROUP BY ml.user_id
+    HAVING log_count >= 3
+  `).all(cutoffStr);
+
+  if (allUserStats.length < 2) return null;
+
+  // Find current user's vector
+  const me = allUserStats.find(u => u.user_id === userId);
+  if (!me) return null;
+
+  const meVec = [me.avg_cal, me.avg_protein, me.avg_fat, me.avg_carbs];
+
+  // Score based on percentage differences. Lower is better. 0 = exact match.
+  function getDiffScore(me, other) {
+      const calDiff = Math.abs(me.avg_cal - other.avg_cal) / Math.max(me.avg_cal, 1);
+      const protDiff = Math.abs(me.avg_protein - other.avg_protein) / Math.max(me.avg_protein, 1);
+      const carbDiff = Math.abs(me.avg_carbs - other.avg_carbs) / Math.max(me.avg_carbs, 1);
+      const fatDiff = Math.abs(me.avg_fat - other.avg_fat) / Math.max(me.avg_fat, 1);
+      
+      return Math.min(1, calDiff)*0.4 + Math.min(1, protDiff)*0.2 + Math.min(1, carbDiff)*0.2 + Math.min(1, fatDiff)*0.2;
+  }
+
+  // Find top 5 matches
+  let matches = [];
+  for (const u of allUserStats) {
+    if (u.user_id === userId) continue;
+    const score = getDiffScore(me, u);
+    matches.push({ u, score });
+  }
+
+  matches.sort((a, b) => a.score - b.score);
+  const topMatches = matches.slice(0, 5);
+
+  if (topMatches.length === 0) return null;
+
+  // Compile twins
+  const twinsResult = [];
+  for (const match of topMatches) {
+      const best = match.u;
+
+      const sharedFoods = db.prepare(`
+        SELECT item_name, COUNT(*) as count
+        FROM meal_logs
+        WHERE user_id IN (?, ?) AND date >= ?
+        GROUP BY item_name
+        HAVING COUNT(DISTINCT user_id) = 2
+        ORDER BY count DESC
+        LIMIT 5
+      `).all(userId, best.user_id, cutoffStr);
+
+      const topProteinRaw = db.prepare(`
+        SELECT date, SUM(protein) as total_protein, SUM(calories) as total_cals, SUM(carbs) as total_carbs
+        FROM meal_logs
+        WHERE user_id = ? AND date >= ?
+        GROUP BY date
+        ORDER BY total_protein DESC
+        LIMIT 1
+      `).get(best.user_id, cutoffStr);
+
+      const lowestCalRaw = db.prepare(`
+        SELECT date, SUM(protein) as total_protein, SUM(calories) as total_cals, SUM(carbs) as total_carbs
+        FROM meal_logs
+        WHERE user_id = ? AND date >= ?
+        GROUP BY date
+        HAVING total_cals > 800
+        ORDER BY total_cals ASC
+        LIMIT 1
+      `).get(best.user_id, cutoffStr);
+
+      const lowestCarbRaw = db.prepare(`
+        SELECT date, SUM(protein) as total_protein, SUM(calories) as total_cals, SUM(carbs) as total_carbs
+        FROM meal_logs
+        WHERE user_id = ? AND date >= ?
+        GROUP BY date
+        HAVING total_cals > 800
+        ORDER BY total_carbs ASC
+        LIMIT 1
+      `).get(best.user_id, cutoffStr);
+
+      function getDayWithLogs(summary, title, metric) {
+         if (!summary) return null;
+         const logs = db.prepare(`
+            SELECT meal_type, item_name, calories, protein, carbs
+            FROM meal_logs
+            WHERE user_id = ? AND date = ?
+         `).all(best.user_id, summary.date);
+         return {
+            title,
+            metricLabel: metric,
+            date: summary.date,
+            total_protein: Math.round(summary.total_protein || 0),
+            total_cals: Math.round(summary.total_cals || 0),
+            total_carbs: Math.round(summary.total_carbs || 0),
+            logs
+         };
+      }
+
+      const highlights = [];
+      const tp = getDayWithLogs(topProteinRaw, "Top Protein Day", topProteinRaw ? `${Math.round(topProteinRaw.total_protein)}g PRO` : '');
+      if (tp) highlights.push(tp);
+
+      const lc = getDayWithLogs(lowestCalRaw, "Lowest Calorie Day", lowestCalRaw ? `${Math.round(lowestCalRaw.total_cals)} CALS` : '');
+      if (lc && !highlights.find(h => h.date === lc.date)) highlights.push(lc);
+
+      const lcb = getDayWithLogs(lowestCarbRaw, "Lowest Carb Day", lowestCarbRaw ? `${Math.round(lowestCarbRaw.total_carbs)}g CARBS` : '');
+      if (lcb && !highlights.find(h => h.date === lcb.date)) highlights.push(lcb);
+
+      const similarityScore = Math.max(0, Math.round((1 - match.score) * 100));
+
+      twinsResult.push({
+          twin: {
+            name:        'Campus Peer',
+            picture:     null,
+            email:       null,
+            avg_cal:     Math.round(best.avg_cal || 0),
+            avg_protein: Math.round(best.avg_protein || 0),
+            avg_fat:     Math.round(best.avg_fat || 0),
+            avg_carbs:   Math.round(best.avg_carbs || 0),
+            log_count:   best.log_count,
+            highlights:  highlights
+          },
+          similarity: similarityScore,
+          sharedFoods: sharedFoods.map(f => f.item_name)
+      });
+  }
+
+  // Full self stats
+  const myFull = {
+    name: me.name,
+    picture: me.picture,
+    email: me.email,
+    avg_cal:     Math.round(me.avg_cal || 0),
+    avg_protein: Math.round(me.avg_protein || 0),
+    avg_fat:     Math.round(me.avg_fat || 0),
+    avg_carbs:   Math.round(me.avg_carbs || 0),
+    log_count:   me.log_count
+  };
+
+  return {
+    me: myFull,
+    twins: twinsResult,
+    days
+  };
+}
+
+// ── EXPERIMENTS ───────────────────────────────────
+function getExperiments(userId) {
+  return db.prepare('SELECT * FROM experiments WHERE user_id = ? ORDER BY id DESC').all(userId);
+}
+
+function createExperiment(userId, title, durationDays, startDate) {
+  const result = db.prepare('INSERT INTO experiments (user_id, title, duration_days, start_date) VALUES (?, ?, ?, ?)').run(userId, title, durationDays, startDate);
+  return result.lastInsertRowid;
+}
+
+function updateExperimentStatus(experimentId, userId, status) {
+  db.prepare('UPDATE experiments SET status = ? WHERE id = ? AND user_id = ?').run(status, experimentId, userId);
+}
+
+function getExperimentLogs(experimentId) {
+  return db.prepare('SELECT * FROM experiment_logs WHERE experiment_id = ? ORDER BY date ASC').all(experimentId);
+}
+
+function addExperimentLog(experimentId, date, weight, hungerLevel, consistency, notes) {
+  db.prepare(`
+    INSERT INTO experiment_logs (experiment_id, date, weight, hunger_level, consistency, notes)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(experimentId, date, weight, hungerLevel, consistency, notes);
+}
+
 module.exports = {
   getMenu,
   saveMenu,
@@ -406,5 +623,11 @@ module.exports = {
   getWaitTimeStats,
   getWaitTimeStatsAll,
   clearStaleJobs,
-  getLeaderboard
+  getLeaderboard,
+  findDiningTwin,
+  getExperiments,
+  createExperiment,
+  updateExperimentStatus,
+  getExperimentLogs,
+  addExperimentLog
 };

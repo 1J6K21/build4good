@@ -176,6 +176,8 @@ function showPage(name) {
     if (name === 'dashboard') refreshDashboard();
     if (name === 'menu') initMenuPage();
     if (name === 'leaderboard') fetchLeaderboard();
+    if (name === 'mirror') fetchMirror();
+    if (name === 'experiments') fetchExperiments();
 }
 
 // ── Dashboard ─────────────────────────────
@@ -282,6 +284,7 @@ async function refreshDashboard() {
 
     // Safety check to ensure these execute even if shortcuts load fails
     try { updateTrendChart(); } catch (e) { console.error(e); }
+    try { renderTradeoffTimeline(logs, calGoal); } catch (e) { console.error(e); }
     // Weekly Overview call removed
     try { updateWeightProjection(); } catch (e) { console.error(e); }
     try { updateInsights(); } catch (e) { console.error(e); }
@@ -1016,6 +1019,103 @@ function updateLogBar() {
         pctEl.textContent = `${pct}% of goal`;
         pctEl.style.color = pct > 60 ? '#ef4444' : pct > 35 ? '#f59e0b' : '#10b981';
     }
+
+    renderNegotiator(pct);
+}
+
+function renderNegotiator(totalPct) {
+    const panel = document.getElementById('negotiatorPanel');
+    if (!panel) return;
+    
+    let trapItem = null;
+    let maxCal = 0;
+    
+    for (const item of selectedItems) {
+        const cal = (item.calories || 0) * item.servings;
+        const pro = item.protein || 0;
+        const fib = item.fiber || 0;
+        const isHighProtein = pro >= 15;
+        
+        if ((cal >= 500) || (cal >= 350 && !isHighProtein && fib < 2)) {
+            if (cal > maxCal) {
+                maxCal = cal;
+                trapItem = item;
+            }
+        }
+    }
+    
+    if (!trapItem) {
+        panel.style.display = 'none';
+        panel.classList.remove('show');
+        return;
+    }
+    
+    panel.style.display = 'flex';
+    panel.classList.add('show');
+    
+    const walkMiles = Math.max(1, Math.round(maxCal / 100));
+    const runMins = Math.max(5, Math.round(maxCal / 11));
+    const goal = (currentUser && currentUser.calorie_goal) ? currentUser.calorie_goal : 2000;
+    const itemPct = Math.round((maxCal / goal) * 100);
+    
+    let swapMsg = '';
+    let nameLower = trapItem.name.toLowerCase();
+    if (nameLower.includes('fries')) {
+        swapMsg = `Skip the fries &rarr; save ${Math.round(maxCal)} cal`;
+    } else if (nameLower.includes('burger')) {
+        swapMsg = 'Swap to grilled chicken &rarr; save ~200 cal';
+    } else if (nameLower.includes('soda') || nameLower.includes('drink')) {
+        swapMsg = 'Skip the drink &rarr; dessert unlocked';
+    } else if (nameLower.includes('pizza')) {
+        swapMsg = `Drop one slice &rarr; save ~${Math.round(maxCal / trapItem.servings / 2)} cal`;
+    } else {
+        swapMsg = `Halve the portion &rarr; save ${Math.round(maxCal / 2)} cal`;
+    }
+
+    panel.innerHTML = `
+        <div class="negotiator-header">
+            <div class="negotiator-title">
+                <i class="fa-solid fa-triangle-exclamation"></i> 
+                Watch out — ${trapItem.name} is a trap meal
+            </div>
+            <button class="btn-close" style="font-size:1.2rem; cursor:pointer;" onclick="dismissNegotiator()">×</button>
+        </div>
+        <div class="negotiator-stats">
+            <div class="negotiator-stat"><i class="fa-solid fa-wallet"></i> <span>Costs <strong>${itemPct}%</strong> of daily budget</span></div>
+            <div class="negotiator-stat"><i class="fa-solid fa-person-running"></i> <span>Equals <strong>${runMins} min</strong> running</span></div>
+            <div class="negotiator-stat"><i class="fa-solid fa-person-walking"></i> <span>Or <strong>${walkMiles} miles</strong> walking</span></div>
+            <div class="negotiator-stat"><i class="fa-solid fa-burger"></i> <span>Calorie equivalent: <strong>${Math.max(1, Math.round((maxCal/350)*10)/10)} burgers</strong></span></div>
+        </div>
+        <div class="negotiator-swap">
+            <span class="negotiator-swap-text">🤝 ${swapMsg}</span>
+            <button class="negotiator-swap-btn" onclick="applySwap('${trapItem.name.replace(/'/g, "\\'")}')">Smarter Swap</button>
+        </div>
+    `;
+}
+
+function dismissNegotiator() {
+    const panel = document.getElementById('negotiatorPanel');
+    if (panel) panel.style.display = 'none';
+}
+
+function applySwap(itemName) {
+    const idx = selectedItems.findIndex(i => i.name === itemName);
+    if (idx >= 0) {
+        if (selectedItems[idx].servings > 0.5) {
+            selectedItems[idx].servings = Math.max(0.5, selectedItems[idx].servings / 2);
+            // Updating serving UI
+            const itemEl = document.getElementById(`item-${itemName.replace(/\s+/g, '-')}`);
+            if (itemEl) {
+                const valEl = itemEl.querySelector('.serving-val');
+                if (valEl) valEl.textContent = selectedItems[idx].servings;
+            }
+        } else {
+            selectedItems.splice(idx, 1);
+            const el = document.getElementById(`item-${itemName.replace(/\s+/g, '-')}`);
+            if (el) el.classList.remove('selected');
+        }
+        updateLogBar();
+    }
 }
 
 function openLogModal() {
@@ -1031,7 +1131,27 @@ function openLogModal() {
             ${selectedItems.length} item(s) selected
         </div>
     `;
+    
+    // Select the appropriate meal type based on activePeriodSlug
+    document.querySelectorAll('#mealTypeControl .segment-btn').forEach(b => {
+        b.classList.remove('active');
+        const t = b.dataset.type.toLowerCase();
+        const ap = (activePeriodSlug || '').toLowerCase();
+        if (t === ap || (ap === 'brunch' && t === 'breakfast')) {
+            b.classList.add('active');
+        }
+    });
+    if (!document.querySelector('#mealTypeControl .segment-btn.active')) {
+        const fallback = document.querySelector('#mealTypeControl .segment-btn');
+        if (fallback) fallback.classList.add('active');
+    }
+    
     document.getElementById('logModalBackdrop').classList.add('open');
+}
+
+function selectMealType(btn) {
+    document.querySelectorAll('#mealTypeControl .segment-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
 }
 
 function closeLogModal() {
@@ -1057,8 +1177,14 @@ async function confirmLog() {
     }));
 
     let allSuccess = true;
+    const activeMealBtn = document.querySelector('#mealTypeControl .segment-btn.active');
+    let mealType = activePeriodSlug || 'lunch';
+    if (activeMealBtn) {
+        mealType = activeMealBtn.dataset.type.toLowerCase();
+    }
+
     for (const item of itemsToLog) {
-        const ok = await addLogEntry(date, activePeriodSlug, [item]);
+        const ok = await addLogEntry(date, mealType, [item]);
         if (!ok) allSuccess = false;
     }
 
@@ -1236,7 +1362,13 @@ function openGoalsModal() {
     document.getElementById('goalCarbInput').value = currentUser.carb_goal || 250;
     document.getElementById('userHeight').value = currentUser.height || '';
     document.getElementById('userWeight').value = currentUser.weight || '';
-    document.getElementById('advisorSuggestion').innerHTML = 'Enter your metrics above to see suggested goals.';
+    
+    const savedActivity = localStorage.getItem('userActivity') || '1.55';
+    const savedGoal = localStorage.getItem('userGoal') || '0';
+    if(document.getElementById('userActivity')) document.getElementById('userActivity').value = savedActivity;
+    if(document.getElementById('userGoal')) document.getElementById('userGoal').value = savedGoal;
+    
+    document.getElementById('advisorSuggestion').innerHTML = 'Enter your metrics above to see suggested goals based on average activity levels.';
     document.getElementById('goalsModalBackdrop').classList.add('open');
 }
 
@@ -1259,6 +1391,9 @@ async function saveGoals() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(goals)
     });
+
+    if(document.getElementById('userActivity')) localStorage.setItem('userActivity', document.getElementById('userActivity').value);
+    if(document.getElementById('userGoal')) localStorage.setItem('userGoal', document.getElementById('userGoal').value);
 
     if (res.ok) {
         toast('Goals updated!');
@@ -1361,9 +1496,11 @@ async function removeMetricFromDashboard(metric) {
 function calculateAdvisorSuggested() {
     const h = parseFloat(document.getElementById('userHeight').value);
     const w = parseFloat(document.getElementById('userWeight').value);
+    const activityLvl = document.getElementById('userActivity') ? parseFloat(document.getElementById('userActivity').value) : 1.55;
+    const goalChange = document.getElementById('userGoal') ? parseFloat(document.getElementById('userGoal').value) : 0;
 
     if (!h || !w) {
-        document.getElementById('advisorSuggestion').innerHTML = 'Enter your metrics above to see suggested goals.';
+        document.getElementById('advisorSuggestion').innerHTML = 'Enter your metrics above to see suggested goals based on average activity levels.';
         return;
     }
 
@@ -1374,18 +1511,19 @@ function calculateAdvisorSuggested() {
     const age = 20;
 
     const bmr = (10 * weightKg) + (6.25 * heightCm) - (5 * age) + 5;
-    const tdee = Math.round(bmr * 1.4); // Lightly active multiplier
+    let tdee = Math.round(bmr * activityLvl);
+    tdee += goalChange;
 
-    // Suggest 30/30/40 split (standard)
+    // Suggest macros based on standard split with protein prioritization
     const protein = Math.round(w * 0.9); // 0.9g per lb
     const fat = Math.round(w * 0.35);    // 0.35g per lb
-    const carbs = Math.round((tdee - (protein * 4) - (fat * 9)) / 4);
+    const carbs = Math.max(0, Math.round((tdee - (protein * 4) - (fat * 9)) / 4));
 
     document.getElementById('advisorSuggestion').innerHTML = `
         <strong>Suggested Daily Goals:</strong><br/>
         Calories: <strong>${tdee}</strong> kcal<br/>
         Protein: <strong>${protein}g</strong> • Fats: <strong>${fat}g</strong> • Carbs: <strong>${carbs}g</strong>
-        <p style="font-size: 0.7rem; margin-top: 5px; opacity: 0.7;">Based on Mifflin-St Jeor formula for a 20yo lightly active adult.</p>
+        <p style="font-size: 0.7rem; margin-top: 5px; opacity: 0.7;">Based on your inputs and goals.</p>
     `;
 
     // Store temporarily for applying
@@ -2255,5 +2393,456 @@ async function addExternalCalories() {
         refreshDashboard();
     } else {
         toast('Failed to add external calories.');
+    }
+}
+
+// ══════════════════════════════════════════════
+//  DINING HALL TWIN — Mirror Feature
+// ══════════════════════════════════════════════
+
+let currentTwinIndex = 0;
+let currentHighlightIndex = 0;
+let mirrorDataCache = null;
+
+async function fetchMirror() {
+    const days = document.getElementById('mirrorDays')?.value || '30';
+
+    const loading = document.getElementById('mirrorLoading');
+    const noTwin  = document.getElementById('mirrorNoTwin');
+    const content = document.getElementById('mirrorContent');
+
+    if (loading) loading.style.display = 'block';
+    if (noTwin)  noTwin.style.display  = 'none';
+    if (content) content.style.display = 'none';
+
+    try {
+        const res  = await authFetch(`${API}/api/mirror?days=${days}`);
+        const data = await res.json();
+
+        if (loading) loading.style.display = 'none';
+
+        if (!data || !data.twins || data.twins.length === 0) {
+            if (noTwin) noTwin.style.display = 'block';
+            return;
+        }
+
+        mirrorDataCache = data;
+        currentTwinIndex = 0;
+        renderMirror();
+        if (content) content.style.display = 'block';
+
+    } catch (e) {
+        console.error('Mirror fetch error', e);
+        if (loading) loading.style.display = 'none';
+        if (noTwin)  noTwin.style.display  = 'block';
+    }
+}
+
+function prevTwin() {
+    if (!mirrorDataCache || !mirrorDataCache.twins) return;
+    currentTwinIndex = (currentTwinIndex - 1 + mirrorDataCache.twins.length) % mirrorDataCache.twins.length;
+    currentHighlightIndex = 0;
+    renderMirror();
+}
+
+function nextTwin() {
+    if (!mirrorDataCache || !mirrorDataCache.twins) return;
+    currentTwinIndex = (currentTwinIndex + 1) % mirrorDataCache.twins.length;
+    currentHighlightIndex = 0;
+    renderMirror();
+}
+
+function prevHighlight() {
+    const match = mirrorDataCache?.twins[currentTwinIndex];
+    if (!match || !match.twin.highlights || match.twin.highlights.length === 0) return;
+    currentHighlightIndex = (currentHighlightIndex - 1 + match.twin.highlights.length) % match.twin.highlights.length;
+    renderMirrorHighlight();
+}
+
+function nextHighlight() {
+    const match = mirrorDataCache?.twins[currentTwinIndex];
+    if (!match || !match.twin.highlights || match.twin.highlights.length === 0) return;
+    currentHighlightIndex = (currentHighlightIndex + 1) % match.twin.highlights.length;
+    renderMirrorHighlight();
+}
+
+function renderMirror() {
+    if (!mirrorDataCache) return;
+    const { me, twins, days } = mirrorDataCache;
+    const match = twins[currentTwinIndex];
+    if (!match) return;
+    
+    const { twin, similarity, sharedFoods } = match;
+    
+    const counterEl = document.getElementById('mirrorTwinCounter');
+    if (counterEl) counterEl.textContent = `Peer Match ${currentTwinIndex + 1} of ${twins.length}`;
+
+
+    // Similarity banner
+    const simEl  = document.getElementById('mirrorSimilarityPct');
+    const simBar = document.getElementById('mirrorSimBar');
+    if (simEl)  simEl.textContent = `${Math.min(similarity, 100)}%`;
+    if (simBar) {
+        simBar.style.width = '0%';
+        setTimeout(() => { simBar.style.width = `${Math.min(similarity, 100)}%`; }, 120);
+    }
+
+    // Avatars + names
+    const fallbackUrl = n => `https://ui-avatars.com/api/?name=${encodeURIComponent(n)}&background=1e293b&color=fff&bold=true`;
+
+    const myPic = document.getElementById('mirrorMyPic');
+    if (myPic) {
+        myPic.src     = me.picture || fallbackUrl(me.name);
+        myPic.onerror = () => { myPic.src = fallbackUrl(me.name); };
+    }
+    const twinPic = document.getElementById('mirrorTwinPic');
+    if (twinPic) {
+        twinPic.src     = twin.picture || fallbackUrl(twin.name);
+        twinPic.onerror = () => { twinPic.src = fallbackUrl(twin.name); };
+    }
+
+    const myNameEl   = document.getElementById('mirrorMyName');
+    const twinNameEl = document.getElementById('mirrorTwinName');
+    if (myNameEl)   myNameEl.textContent   = me.name   || 'You';
+    if (twinNameEl) twinNameEl.textContent = twin.name || 'Twin';
+
+    const myLogsEl   = document.getElementById('mirrorMyLogs');
+    const twinLogsEl = document.getElementById('mirrorTwinLogs');
+    if (myLogsEl)   myLogsEl.textContent   = `${me.log_count} logs (${days}d)`;
+    if (twinLogsEl) twinLogsEl.textContent = `${twin.log_count} logs (${days}d)`;
+
+    // Stat rows — NBA comparison style
+    const stats = [
+        { label: 'AVG CALORIES', myVal: me.avg_cal,     twinVal: twin.avg_cal,     unit: 'cal', higherIsBad: true  },
+        { label: 'AVG PROTEIN',  myVal: me.avg_protein, twinVal: twin.avg_protein, unit: 'g',   higherIsBad: false },
+        { label: 'AVG CARBS',    myVal: me.avg_carbs,   twinVal: twin.avg_carbs,   unit: 'g',   higherIsBad: null  },
+        { label: 'AVG FAT',      myVal: me.avg_fat,     twinVal: twin.avg_fat,     unit: 'g',   higherIsBad: null  },
+    ];
+
+    const rowsEl = document.getElementById('mirrorStatRows');
+    if (rowsEl) {
+        rowsEl.innerHTML = stats.map(s => {
+            const myBetter   = s.higherIsBad === null ? false : (s.higherIsBad ? s.myVal < s.twinVal : s.myVal > s.twinVal);
+            const twinBetter = s.higherIsBad === null ? false : (s.higherIsBad ? s.twinVal < s.myVal  : s.twinVal > s.myVal);
+
+            const maxVal   = Math.max(s.myVal, s.twinVal, 1);
+            const myBarW   = Math.round((s.myVal   / maxVal) * 100);
+            const twinBarW = Math.round((s.twinVal / maxVal) * 100);
+            const unitStr  = s.unit === 'cal' ? '' : s.unit;
+
+            return `
+            <div class="mirror-stat-row">
+                <div class="mirror-stat-side me-side">
+                    <span class="mirror-stat-val ${myBetter ? 'winner-val' : ''}">${s.myVal.toLocaleString()}${unitStr}</span>
+                    <div class="mirror-bar-track">
+                        <div class="mirror-bar-fill me-bar ${myBetter ? 'winner-bar' : ''}" style="width:${myBarW}%"></div>
+                    </div>
+                </div>
+                <div class="mirror-center-stat">${s.label}</div>
+                <div class="mirror-stat-side twin-side">
+                    <div class="mirror-bar-track">
+                        <div class="mirror-bar-fill twin-bar ${twinBetter ? 'winner-bar-twin' : ''}" style="width:${twinBarW}%"></div>
+                    </div>
+                    <span class="mirror-stat-val ${twinBetter ? 'winner-val' : ''}">${s.twinVal.toLocaleString()}${unitStr}</span>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    // Shared foods
+    const sharedEl = document.getElementById('mirrorSharedFoods');
+    if (sharedEl) {
+        if (!sharedFoods || sharedFoods.length === 0) {
+            sharedEl.innerHTML = '<p style="color:var(--text-3);font-size:0.85rem;">No foods logged in common during this period.</p>';
+        } else {
+            sharedEl.innerHTML = sharedFoods.map((f, i) => `
+                <div class="mirror-food-chip">
+                    <span class="mirror-food-num">${i + 1}</span>
+                    <span class="mirror-food-name">${f}</span>
+                </div>
+            `).join('');
+        }
+    }
+
+    // Outcomes narrative
+    const outEl = document.getElementById('mirrorOutcomes');
+    if (outEl) {
+        const avgCal = twin.avg_cal;
+        const surplus = avgCal - 2000;
+        let msg, cls;
+        if (surplus > 300) {
+            msg = `⚠️ This student is leaning towards a <strong>surplus</strong> (~${avgCal} cal/day). Could be a great model for a bulk.`;
+            cls = 'outcome-warn';
+        } else if (surplus < -300) {
+            msg = `✅ This student maintains a <strong>deficit</strong> (~${avgCal} cal/day). Consistent with cutting body weight.`;
+            cls = 'outcome-good';
+        } else {
+            msg = `⚖️ This student eats near <strong>maintenance</strong> (~${avgCal} cal/day). Good for a slow body recomposition.`;
+            cls = 'outcome-neutral';
+        }
+        outEl.innerHTML = `<div class="mirror-outcome-badge ${cls}">${msg}</div>`;
+    }
+
+    // Peer Highlights
+    renderMirrorHighlight();
+}
+
+function renderMirrorHighlight() {
+    const highlightsEl = document.getElementById('mirrorHighlightsRow');
+    if (!highlightsEl) return;
+    const match = mirrorDataCache?.twins[currentTwinIndex];
+    if (!match) return;
+
+    if (match.twin.highlights && match.twin.highlights.length > 0) {
+        
+        const highlightCount = match.twin.highlights.length;
+        currentHighlightIndex = currentHighlightIndex % highlightCount;
+        const hl = match.twin.highlights[currentHighlightIndex];
+        
+        // Format nice date
+        const dateStr = new Date(hl.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+        
+        let headerNav = '';
+        if (highlightCount > 1) {
+             headerNav = `
+             <div style="display:flex; justify-content:space-between; align-items:center; background: var(--surface); padding: 4px 8px; margin-bottom: 12px; border-radius: 8px; border: 1px solid var(--border);">
+                 <button class="btn" onclick="prevHighlight()" style="padding: 2px 10px; font-size: 0.95rem; background:transparent;"><i class="fa-solid fa-chevron-left"></i></button>
+                 <span style="font-size: 0.72rem; font-weight: 800; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-2);">Highlight ${currentHighlightIndex + 1} of ${highlightCount}</span>
+                 <button class="btn" onclick="nextHighlight()" style="padding: 2px 10px; font-size: 0.95rem; background:transparent;"><i class="fa-solid fa-chevron-right"></i></button>
+             </div>
+             `;
+        }
+
+        let hHtml = `
+            ${headerNav}
+            <div style="margin-bottom: 14px; background: var(--surface2); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                <div style="display:flex; justify-content:space-between; align-items: center; margin-bottom: 4px;">
+                    <span style="font-size: 0.75rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-3);">${hl.title} • ${dateStr}</span>
+                    <span style="font-size: 1rem; font-weight: 900; color: #10b981;">${hl.metricLabel}</span>
+                </div>
+                <div style="font-size: 0.8rem; font-weight: 600; color: var(--text-2);">
+                    Total Intake: ${hl.total_cals.toLocaleString()} Calories
+                </div>
+            </div>
+        `;
+        
+        const meals = { breakfast: [], lunch: [], dinner: [], snack: [] };
+        hl.logs.forEach(l => {
+            const mt = l.meal_type || 'snack';
+            if (meals[mt]) meals[mt].push(l);
+        });
+        
+        const mealColors = { breakfast: 'var(--primary)', lunch: 'var(--green)', dinner: 'var(--amber)', snack: 'var(--purple, #8b5cf6)' };
+        
+        ['breakfast', 'lunch', 'dinner', 'snack'].forEach(m => {
+           if (meals[m].length > 0) {
+               hHtml += `<div style="display: flex; align-items: center; gap: 6px; font-size: 0.75rem; font-weight: 900; text-transform: uppercase; margin: 14px 0 6px; color: ${mealColors[m]};">
+                   <i class="fa-solid fa-circle" style="font-size: 0.4rem;"></i> ${m}
+               </div>`;
+               meals[m].forEach(l => {
+                   hHtml += `
+                   <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; padding: 6px 0; border-bottom: 1px dashed var(--border);">
+                       <span style="font-weight: 600; color: var(--text); flex: 1; padding-right: 10px; line-height: 1.3;">${l.item_name}</span>
+                       <div style="text-align: right; min-width: 60px;">
+                           <div style="font-weight: 800; color: var(--primary);">${l.protein}g <span style="font-size: 0.65rem; color: var(--text-3); font-weight: 700;">PRO</span></div>
+                           <div style="font-weight: 600; color: var(--text-3); font-size: 0.7rem;">${l.calories} cal</div>
+                       </div>
+                   </div>`;
+               });
+           }
+        });
+        
+        highlightsEl.innerHTML = hHtml;
+    } else {
+         highlightsEl.innerHTML = '<span style="font-size: 0.85rem; font-weight: 600; color:var(--text-3);">Not enough logged days to build a powerful meal highlight yet. Check back soon!</span>';
+    }
+}
+
+// ── Tradeoff Timeline (Day-level Optimization) ─────────────────────────
+function renderTradeoffTimeline(logs, dailyGoal) {
+    const container = document.getElementById('tradeoffTimelineContainer');
+    if (!container) return;
+
+    const consumed = { breakfast: 0, lunch: 0, dinner: 0, snack: 0 };
+    logs.forEach(l => {
+        let mt = (l.meal_type || 'snack').toLowerCase();
+        if (mt === 'brunch') mt = 'lunch';
+        if (consumed[mt] !== undefined) {
+            consumed[mt] += (l.calories || 0);
+        } else {
+            consumed.snack += (l.calories || 0);
+        }
+    });
+
+    const totalConsumed = Object.values(consumed).reduce((a, b) => a + b, 0);
+    const remaining = Math.max(0, dailyGoal - totalConsumed);
+
+    const getPct = (cals) => (cals / dailyGoal) * 100;
+    
+    const bPct = getPct(consumed.breakfast);
+    const lPct = getPct(consumed.lunch);
+    const dPct = getPct(consumed.dinner);
+    const sPct = getPct(consumed.snack);
+    const rPct = Math.max(0, 100 - (bPct + lPct + dPct + sPct));
+
+    const renderBlock = (meal, pct) => {
+        if (pct <= 0) return '';
+        return `
+            <div class="bucket-fill ${meal}" style="width: ${pct}%" title="${meal.charAt(0).toUpperCase() + meal.slice(1)}">
+                ${pct > 8 ? `<span>${Math.round(consumed[meal])}</span>` : ''}
+            </div>
+        `;
+    };
+
+    container.innerHTML = `
+        <div class="bucket-track">
+            ${renderBlock('breakfast', bPct)}
+            ${renderBlock('lunch', lPct)}
+            ${renderBlock('dinner', dPct)}
+            ${renderBlock('snack', sPct)}
+            <div class="bucket-remaining" style="width: ${rPct}%;">
+                ${rPct > 15 ? `${Math.round(remaining)} LEFT` : ''}
+            </div>
+        </div>
+        <div class="tradeoff-legend">
+            ${totalConsumed > 0 ? `
+                <div class="tradeoff-legend-item"><div class="tradeoff-dot" style="background:var(--primary);"></div>Breakfast</div>
+                <div class="tradeoff-legend-item"><div class="tradeoff-dot" style="background:var(--green);"></div>Lunch</div>
+                <div class="tradeoff-legend-item"><div class="tradeoff-dot" style="background:var(--amber);"></div>Dinner</div>
+                <div class="tradeoff-legend-item"><div class="tradeoff-dot" style="background:var(--purple, #8b5cf6);"></div>Snack</div>
+            ` : `<div style="color: var(--text-3); font-size: 0.85rem;">Log calories to see them fill up your bucket.</div>`}
+        </div>
+    `;
+
+    document.getElementById('tradeoffTotal').textContent = Math.round(totalConsumed).toLocaleString();
+}
+
+// ── EXPERIMENTS ────────────────────────────────────
+
+function openNewExperimentModal() {
+    document.getElementById('newExperimentModal').classList.add('open');
+}
+
+function closeNewExperimentModal() {
+    document.getElementById('newExperimentModal').classList.remove('open');
+}
+
+async function createNewExperiment() {
+    const title = document.getElementById('expTitle').value;
+    const durationDays = document.getElementById('expDuration').value;
+    const startDate = trackingDate || todayStr();
+
+    if (!title) {
+        toast('Please enter a hypothesis or rule.');
+        return;
+    }
+
+    const res = await authFetch(`${API}/api/user/experiments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, durationDays, startDate })
+    });
+
+    if (res.ok) {
+        closeNewExperimentModal();
+        document.getElementById('expTitle').value = '';
+        toast('Experiment Started!');
+        fetchExperiments();
+    }
+}
+
+async function fetchExperiments() {
+    const res = await authFetch(`${API}/api/user/experiments`);
+    const data = await res.json();
+    renderExperiments(data.experiments || []);
+}
+
+function renderExperiments(experiments) {
+    const list = document.getElementById('experimentsList');
+    if (!experiments.length) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon"><i class="fa-solid fa-flask"></i></div>
+                <p>You aren't running any experiments. Start one to turn yourself into a lab!</p>
+            </div>
+        `;
+        return;
+    }
+
+    list.innerHTML = experiments.map(exp => {
+        const totalLogs = exp.logs.length;
+        const remaining = Math.max(0, exp.duration_days - totalLogs);
+        
+        let logsHtml = exp.logs.map(log => {
+            const consistencyColor = log.consistency == 1 ? 'var(--red)' : (log.consistency == 2 ? 'var(--gold)' : 'var(--green)');
+            return `
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding: 8px 0; font-size: 0.85rem;">
+                    <div>
+                        <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:${consistencyColor}; margin-right:5px;"></span>
+                        <strong>${log.date}:</strong> ${log.notes || 'No notes'}
+                    </div>
+                    <div style="color: var(--text-2);">
+                        ${log.weight ? log.weight + ' lbs | ' : ''} Hunger: ${log.hunger_level}/5
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        if (exp.logs.length === 0) {
+            logsHtml = `<div style="padding: 10px; color: var(--text-2); font-size: 0.9rem; font-style: italic;">No logs yet. Check in today!</div>`;
+        }
+
+        return `
+            <div class="card" style="padding: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
+                    <div>
+                        <div class="insight-eyebrow" style="margin-bottom: 5px;"><i class="fa-solid fa-hourglass-half"></i> ${remaining} DAYS LEFT</div>
+                        <h3 style="margin: 0; font-size: 1.25rem;">${exp.title}</h3>
+                        <p style="margin: 5px 0 0; font-size: 0.85rem; color: var(--text-2);">Started ${exp.start_date} • ${exp.duration_days} Day Trial</p>
+                    </div>
+                    <button class="btn btn-primary btn-sm" onclick="openLogExperimentModal(${exp.id})" ${remaining === 0 ? 'disabled' : ''}>${remaining === 0 ? 'Done' : 'Log Today'}</button>
+                </div>
+                <div style="background: rgba(0,0,0,0.02); border-radius: 8px; padding: 10px;">
+                    <div style="font-weight: bold; margin-bottom: 8px; font-size: 0.85rem; text-transform: uppercase;">Experiment Data</div>
+                    ${logsHtml}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function openLogExperimentModal(expId) {
+    document.getElementById('logExpId').value = expId;
+    document.getElementById('logExperimentModal').classList.add('open');
+}
+
+function closeLogExperimentModal() {
+    document.getElementById('logExperimentModal').classList.remove('open');
+}
+
+async function submitExperimentLog() {
+    const expId = document.getElementById('logExpId').value;
+    const weight = document.getElementById('logExpWeight').value;
+    const hunger = document.getElementById('logExpHunger').value;
+    const consistency = document.getElementById('logExpConsistency').value;
+    const notes = document.getElementById('logExpNotes').value;
+    const date = trackingDate || todayStr();
+
+    const res = await authFetch(`${API}/api/user/experiments/${expId}/logs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            date, 
+            weight: weight ? parseFloat(weight) : null, 
+            hungerLevel: parseInt(hunger), 
+            consistency: parseInt(consistency), 
+            notes 
+        })
+    });
+
+    if (res.ok) {
+        closeLogExperimentModal();
+        toast('Experiment Data Logged!');
+        fetchExperiments();
     }
 }
