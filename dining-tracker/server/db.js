@@ -596,6 +596,7 @@ function addExperimentLog(experimentId, date, weight, hungerLevel, consistency, 
 }
 
 module.exports = {
+  db,
   getMenu,
   saveMenu,
   cleanupMenus,

@@ -55,11 +55,7 @@ function authenticateToken(req, res, next) {
     const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
     if (!token) return res.status(200).json({ authenticated: false });
 
-    // ── DEV BYPASS ────────────────────────────────────
-    if (token === 'dev-test-token') {
-        req.user = { id: 'test-user-id', email: 'test@example.com', name: 'Test User' };
-        return next();
-    }
+
 
     jwt.verify(token, JWT_SECRET, async (err, decoded) => {
         if (err) {

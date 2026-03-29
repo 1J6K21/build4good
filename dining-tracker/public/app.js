@@ -2941,15 +2941,17 @@ function renderMirrorHighlight() {
                     <span style="font-size: 0.75rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-3);">${hl.title} • ${dateStr}</span>
                     <span style="font-size: 1rem; font-weight: 900; color: #10b981;">${hl.metricLabel}</span>
                 </div>
-                <div style="font-size: 0.8rem; font-weight: 600; color: var(--text-2);">
-                    Total Intake: ${hl.total_cals.toLocaleString()} Calories
+                <div style="display: flex; gap: 15px; font-size: 0.82rem; font-weight: 700; color: var(--text-2);">
+                    <span>${hl.total_cals.toLocaleString()} <span style="font-size: 0.65rem; color: var(--text-3);">CALS</span></span>
+                    <span>${hl.total_protein}g <span style="font-size: 0.65rem; color: var(--text-3);">PRO</span></span>
+                    <span>${hl.total_carbs}g <span style="font-size: 0.65rem; color: var(--text-3);">CARB</span></span>
                 </div>
             </div>
         `;
         
         const meals = { breakfast: [], lunch: [], dinner: [], snack: [] };
         hl.logs.forEach(l => {
-            const mt = l.meal_type || 'snack';
+            const mt = (l.meal_type || 'snack').toLowerCase();
             if (meals[mt]) meals[mt].push(l);
         });
         
