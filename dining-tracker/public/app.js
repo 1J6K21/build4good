@@ -10,6 +10,9 @@ let activePeriodId = '';
 let pollTimer = null;
 let ringChart = null;
 let weekChart = null;
+let selectedLoggedMeals = [];
+let lastFetchedLogs = [];
+let servingIncrement = 0.5;
 
 // ── Token Storage ─────────────────────────────
 function getToken() { return localStorage.getItem('auth_token'); }
@@ -172,6 +175,10 @@ function showPage(name) {
 
 async function refreshDashboard() {
     if (!currentUser) return;
+    
+    // Clear selections on refresh to avoid stale IDs
+    selectedLoggedMeals = [];
+    updateBulkActions();
 
     const date = todayStr();
     const logs = await fetchLogs(date);
@@ -325,7 +332,11 @@ async function updateTrendChart() {
 
         const emptyOverlay = document.getElementById('trendEmpty');
         const hasData = logs.length > 0;
-        if (emptyOverlay) emptyOverlay.style.display = hasData ? 'none' : 'flex';
+        if (emptyOverlay) {
+            emptyOverlay.style.display = hasData ? 'none' : 'flex';
+            emptyOverlay.style.position = 'absolute';
+            emptyOverlay.style.inset = '0';
+        }
 
         const labels = [];
         const values = [];
@@ -517,29 +528,150 @@ function drawRing(current, goal) {
 }
 
 function renderTodayMeals(meals) {
+    lastFetchedLogs = meals || []; // Cache for selection logic
     const el = document.getElementById('todayMealsList');
     if (!el) return;
     if (!meals.length) {
         el.innerHTML = `<div class="empty-state"><div class="empty-icon">🥗</div><p>No meals logged today.</p><button class="btn btn-primary" onclick="showPage('menu')">Browse Menu</button></div>`;
+        updateBulkActions();
         return;
     }
-    el.innerHTML = meals.map(m => `
-    <div class="meal-entry">
-      <div class="meal-entry-header">
-        <div class="meal-entry-left">
-          <div class="meal-entry-name">${(m.meal_type || 'meal').charAt(0).toUpperCase() + (m.meal_type || 'meal').slice(1)}</div>
-          <div class="meal-entry-meta">${m.item_name}</div>
-          <div class="meal-entry-macros">
-            ${m.protein || 0}g P · ${m.fat || 0}g F · ${m.carbs || 0}g C
+    el.innerHTML = meals.map(m => {
+        const isSelected = selectedLoggedMeals.includes(String(m.id));
+        return `
+    <div class="meal-entry ${isSelected ? 'selected' : ''}">
+      <div class="meal-entry-header" onclick="toggleMealSelection('${String(m.id)}')">
+        <div class="meal-entry-header-left" style="display: flex; align-items: center;">
+          <div class="meal-checkbox-wrapper">
+             <input type="checkbox" class="meal-checkbox" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation(); toggleMealSelection('${String(m.id)}')">
+          </div>
+          <div class="meal-entry-left">
+            <div class="meal-entry-name">${(m.meal_type || 'meal').charAt(0).toUpperCase() + (m.meal_type || 'meal').slice(1)}</div>
+            <div class="meal-entry-meta">${m.item_name}</div>
+            <div class="meal-entry-macros">
+              ${m.protein || 0}g P · ${m.fat || 0}g F · ${m.carbs || 0}g C
+            </div>
           </div>
         </div>
-        <div class="meal-entry-right">
+        <div class="meal-entry-right" onclick="event.stopPropagation()">
           <div class="meal-cal-badge">${m.calories || 0} cal</div>
-          <button class="meal-delete-btn" onclick="removeMeal('${m.id}')"><i class="fa-solid fa-trash-can"></i></button>
         </div>
       </div>
     </div>
-  `).join('');
+  `}).join('');
+    updateBulkActions();
+}
+
+function toggleMealSelection(id) {
+    const sId = String(id);
+    const idx = selectedLoggedMeals.indexOf(sId);
+    if (idx >= 0) {
+        selectedLoggedMeals.splice(idx, 1);
+    } else {
+        selectedLoggedMeals.push(sId);
+    }
+    renderTodayMeals(lastFetchedLogs);
+}
+
+function updateBulkActions() {
+    const bar = document.getElementById('mealsBulkActions');
+    const countEl = document.getElementById('bulkCount');
+    if (!bar || !countEl) return;
+
+    if (selectedLoggedMeals.length > 0) {
+        bar.style.display = 'flex';
+        countEl.textContent = `${selectedLoggedMeals.length} selected`;
+    } else {
+        bar.style.display = 'none';
+    }
+}
+
+async function aggregateSelectedMeals() {
+    console.log("[Aggregate] Selected IDs:", selectedLoggedMeals);
+    const selected = lastFetchedLogs.filter(m => selectedLoggedMeals.includes(String(m.id)));
+    console.log("[Aggregate] Matching items found:", selected.length);
+    if (selected.length === 0) {
+        toast("Select some meals to see the summary.");
+        return;
+    }
+
+    const agg = selected.reduce((acc, m) => {
+        acc.calories += (m.calories || 0);
+        acc.protein += (m.protein || 0);
+        acc.fat += (m.fat || 0);
+        acc.carbs += (m.carbs || 0);
+        acc.sodium += (m.sodium || 0);
+        acc.fiber += (m.fiber || 0);
+        acc.sugars += (m.sugars || 0);
+        acc.saturated_fat += (m.saturated_fat || 0);
+        acc.trans_fat += (m.trans_fat || 0);
+        acc.cholesterol += (m.cholesterol || 0);
+        return acc;
+    }, {
+        name: "Aggregated Meal",
+        calories: 0, protein: 0, fat: 0, carbs: 0, sodium: 0,
+        fiber: 0, sugars: 0, saturated_fat: 0, trans_fat: 0, cholesterol: 0
+    });
+
+    // Rounding
+    Object.keys(agg).forEach(k => {
+        if (typeof agg[k] === 'number') agg[k] = Math.round(agg[k]);
+    });
+
+    const grid = document.getElementById('aggregateStatsGrid');
+    grid.innerHTML = `
+        <div class="aggregate-stat-card">
+            <span class="aggregate-stat-val">${agg.calories}</span>
+            <span class="aggregate-stat-lbl">CALORIES</span>
+        </div>
+        <div class="aggregate-stat-card">
+            <span class="aggregate-stat-val">${agg.protein}g</span>
+            <span class="aggregate-stat-lbl">PROTEIN</span>
+        </div>
+        <div class="aggregate-stat-card">
+            <span class="aggregate-stat-val">${agg.carbs}g</span>
+            <span class="aggregate-stat-lbl">CARBS</span>
+        </div>
+        <div class="aggregate-stat-card">
+            <span class="aggregate-stat-val">${agg.fat}g</span>
+            <span class="aggregate-stat-lbl">FAT</span>
+        </div>
+        <div class="aggregate-stat-card">
+            <span class="aggregate-stat-val">${agg.sodium}mg</span>
+            <span class="aggregate-stat-lbl">SODIUM</span>
+        </div>
+        <div class="aggregate-stat-card">
+            <span class="aggregate-stat-val">${agg.fiber}g</span>
+            <span class="aggregate-stat-lbl">FIBER</span>
+        </div>
+    `;
+
+    document.getElementById('copyableJson').textContent = JSON.stringify(agg, null, 2);
+    document.getElementById('aggregateModalBackdrop').classList.add('open');
+}
+
+async function removeSelectedMeals() {
+    if (selectedLoggedMeals.length === 0) return;
+    if (!confirm(`Permanently delete ${selectedLoggedMeals.length} selected meal logs?`)) return;
+
+    for (const id of selectedLoggedMeals) {
+        await authFetch(`${API}/api/user/logs/${id}`, { method: 'DELETE' });
+    }
+    
+    toast(`${selectedLoggedMeals.length} logs removed.`);
+    selectedLoggedMeals = [];
+    refreshDashboard();
+}
+
+function closeAggregateModal() {
+    document.getElementById('aggregateModalBackdrop').classList.remove('open');
+}
+
+function copyAggregateJson() {
+    const text = document.getElementById('copyableJson').textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        toast('Meal object copied to clipboard!');
+    });
 }
 
 async function removeMeal(id) {
@@ -789,9 +921,16 @@ function renderMenu(stations, locName, period, date, waitStats = []) {
                             <span class="item-macro">C <strong>${item.carbs || 0}g</strong></span>
                         </div>
                         <div class="item-serving-controls" onclick="event.stopPropagation()">
-                            <button class="step-btn" onclick="changeServings('${item.name.replace(/'/g, "\\'")}', -0.5)">−</button>
-                            <span class="serving-val">${servings}</span>
-                            <button class="step-btn" onclick="changeServings('${item.name.replace(/'/g, "\\'")}', 0.5)">+</button>
+                            <div class="stepper">
+                                <button class="step-btn" onclick="changeServings('${item.name.replace(/'/g, "\\'")}', -1)">−</button>
+                                <span class="serving-val">${servings}</span>
+                                <button class="step-btn" onclick="changeServings('${item.name.replace(/'/g, "\\'")}', 1)">+</button>
+                            </div>
+                            <div class="increment-toggle">
+                                <button class="inc-btn ${servingIncrement === 0.1 ? 'active' : ''}" onclick="setServingIncrement(0.1)">.1</button>
+                                <button class="inc-btn ${servingIncrement === 0.5 ? 'active' : ''}" onclick="setServingIncrement(0.5)">.5</button>
+                                <button class="inc-btn ${servingIncrement === 1.0 ? 'active' : ''}" onclick="setServingIncrement(1.0)">1</button>
+                            </div>
                         </div>
                     </div>
                 `}).join('')}
@@ -818,11 +957,12 @@ function toggleItem(el, item) {
     updateLogBar();
 }
 
-function changeServings(name, delta) {
+function changeServings(name, sign) {
     const idx = selectedItems.findIndex(i => i.name === name);
     if (idx < 0) return; // Item not selected
 
-    selectedItems[idx].servings = Math.max(0.5, selectedItems[idx].servings + delta);
+    const delta = sign * servingIncrement;
+    selectedItems[idx].servings = Math.max(0.1, parseFloat((selectedItems[idx].servings + delta).toFixed(1)));
 
     // Update UI for the specific item
     const itemEl = document.getElementById(`item-${name.replace(/\s+/g, '-')}`);
@@ -832,6 +972,23 @@ function changeServings(name, delta) {
     }
 
     updateLogBar();
+}
+
+function setServingIncrement(val) {
+    servingIncrement = val;
+    // Update all increment buttons in the UI without full re-render
+    document.querySelectorAll('.inc-btn').forEach(btn => {
+        const btnVal = parseFloat(btn.textContent);
+        // Special case for ".1" and ".5"
+        const isMatch = (btnVal === val) || (val === 0.1 && btn.textContent === '.1') || (val === 0.5 && btn.textContent === '.5') || (val === 1.0 && btn.textContent === '1');
+        
+        if (isMatch) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+    toast(`Increment set to ${val}`);
 }
 
 function updateLogBar() {
@@ -920,7 +1077,14 @@ async function confirmLog() {
     updateWeightProjection();
 }
 
-function showLoading(show) { document.getElementById('menuLoading').style.display = show ? 'block' : 'none'; }
+function showLoading(show) { 
+    const el = document.getElementById('menuLoading');
+    if (show) {
+        el.style.display = 'flex'; 
+    } else {
+        el.style.display = 'none';
+    }
+}
 
 function renderScraping(step) {
     document.getElementById('menuContent').innerHTML = `
@@ -1411,6 +1575,17 @@ async function updateWeightProjection() {
         const data = await res.json();
         const logs = data.logs || [];
 
+        const weightResultEl = document.getElementById('weightResult');
+        const weightDeltaEl = document.getElementById('weightDelta');
+        const weightStatsEl = document.getElementById('projectionStats');
+
+        if (logs.length === 0) {
+            if (weightResultEl) weightResultEl.textContent = "-- lbs";
+            if (weightDeltaEl) weightDeltaEl.textContent = "Log a meal to see projection";
+            if (weightStatsEl) weightStatsEl.innerHTML = '<p style="color:var(--text-3); font-size:0.8rem">Waiting for habits...</p>';
+            return;
+        }
+
         // Calculate average only based on days that have passed in the period
         // or starting from the first log date if it's more recent in the period.
         const logsSorted = [...logs].sort((a,b) => new Date(a.date) - new Date(b.date));
@@ -1474,4 +1649,11 @@ async function updateWeightProjection() {
     } catch (e) {
         console.error('Failed to update weight projection', e);
     }
+}
+
+
+function clearMealSelection() {
+    selectedLoggedMeals = [];
+    refreshDashboard();
+    toast('Selection cleared');
 }

@@ -152,69 +152,81 @@ function parseMenuHtml(html) {
   // Find each station category block (accordion headers/buttons)
   $('[aria-label]').filter((i, el) => {
     const label = ($(el).attr('aria-label') || '').toLowerCase();
-    // Usually "Toggle {Station} category" or similar
+    // Normal labels: "Toggle {Station} category" or "Expand {Station} station"
     return (label.includes('toggle') && label.includes('category')) || 
-           (label.includes('station') && label.includes('toggle'));
+           (label.includes('station') && label.includes('toggle')) ||
+           (label.includes('expand') && label.includes('category'));
   }).each((i, stationEl) => {
     const label = $(stationEl).attr('aria-label') || '';
-    const stationName = label.replace(/toggle /i, '').replace(/ category/i, '').trim();
+    const stationName = label.replace(/toggle /i, '').replace(/expand /i, '').replace(/ category/i, '').replace(/ station/i, '').trim();
 
-    // Find the table after this button or within the same container
-    let container = $(stationEl).closest('.p-4, .px-4, .mb-4');
-    let table = container.find('table').first();
-    
-    // If no table in container, look for next table in DOM
+    // Find the table associated with this station.
+    // The table might be a sibling, or inside a sibling, or inside a container.
+    let table = $(stationEl).find('table').first();
     if (!table.length) {
-      table = $(stationEl).closest('div').nextAll('table').first();
+      // Try siblings of the button
+      table = $(stationEl).nextAll('table').first();
     }
     if (!table.length) {
-      table = $(stationEl).parent().nextAll().find('table').first();
+      // Try inside siblings of the button
+      table = $(stationEl).nextAll().find('table').first();
+    }
+    if (!table.length) {
+      // Often the button and the table container are siblings inside a station wrapper.
+      // We look up to 3 levels up for a sibling container that has a table.
+      let curr = $(stationEl);
+      for (let depth = 0; depth < 3 && !table.length; depth++) {
+        table = curr.nextAll().find('table').first();
+        if (!table.length) table = curr.nextAll('table').first();
+        curr = curr.parent();
+      }
     }
 
     const items = [];
-    table.find('tbody tr').each((j, row) => {
-      const cells = $(row).find('td');
-      if (!cells.length) return;
+    if (table.length) {
+      table.find('tbody tr').each((j, row) => {
+        const cells = $(row).find('td');
+        if (!cells.length) return;
 
-      const firstCell = cells.eq(0);
-      const btn = firstCell.find('button');
-      const itemName = (btn.length ? btn.text() : firstCell.text()).trim();
-      if (!itemName || itemName.toLowerCase().includes('click any item')) return;
+        const firstCell = cells.eq(0);
+        const btn = firstCell.find('button');
+        const itemName = (btn.length ? btn.text() : firstCell.text()).trim();
+        if (!itemName || itemName.toLowerCase().includes('click any item')) return;
 
-      const portionCell = cells.eq(1).text().trim();
-      const caloriesCell = cells.eq(2).text().trim();
-      const calories = parseInt(caloriesCell) || 0;
+        const portionCell = cells.eq(1).length ? cells.eq(1).text().trim() : '';
+        const caloriesCell = cells.eq(2).length ? cells.eq(2).text().trim() : '0';
+        const calories = parseInt(caloriesCell) || 0;
 
-      // Get dietary badges
-      const badges = [];
-      $(row).find('img[alt]').each((k, img) => {
-        const alt = $(img).attr('alt') || '';
-        if (alt.includes('Vegan')) badges.push('VG');
-        else if (alt.includes('Vegetarian')) badges.push('V');
-        else if (alt.includes('Gluten')) badges.push('GF');
-        else if (alt.includes('Protein')) badges.push('PR');
-        else if (alt.includes('Climate')) badges.push('CF');
-      });
+        // Get dietary badges
+        const badges = [];
+        $(row).find('img[alt]').each((k, img) => {
+          const alt = $(img).attr('alt') || '';
+          if (alt.includes('Vegan')) badges.push('VG');
+          else if (alt.includes('Vegetarian')) badges.push('V');
+          else if (alt.includes('Gluten')) badges.push('GF');
+          else if (alt.includes('Protein')) badges.push('PR');
+          else if (alt.includes('Climate')) badges.push('CF');
+        });
 
-      const description = $(row).find('td').first().find('div.mt-1').text().trim();
+        const description = $(row).find('td').first().find('div.mt-1').text().trim();
+        const itemObj = { name: itemName, portion: portionCell, calories, protein: 0, fat: 0, carbs: 0, sodium: 0, badges, description };
 
-      const itemObj = { name: itemName, portion: portionCell, calories, protein: 0, fat: 0, carbs: 0, sodium: 0, badges, description };
-
-      // Fallback for HTML too
-      if (!itemObj.calories) {
-        const history = getKnownFood(itemName);
-        if (history) {
-          itemObj.calories = history.calories;
-          itemObj.protein = history.protein;
-          itemObj.fat = history.fat;
-          itemObj.carbs = history.carbs;
-          itemObj.sodium = history.sodium || 0;
+        // Fallback nutrition from history
+        if (!itemObj.calories || itemObj.calories === 0) {
+          const history = getKnownFood(itemName);
+          if (history) {
+            itemObj.calories = history.calories;
+            itemObj.protein = history.protein;
+            itemObj.fat = history.fat;
+            itemObj.carbs = history.carbs;
+            itemObj.sodium = history.sodium || 0;
+          }
         }
-      }
 
-      if (itemObj.calories > 0) upsertFoodItem(itemObj);
-      items.push(itemObj);
-    });
+        if (itemObj.calories > 0) upsertFoodItem(itemObj);
+        items.push(itemObj);
+      });
+    }
 
     if (items.length > 0) {
       stations.push({ name: stationName, items });
@@ -234,12 +246,18 @@ async function createBrowser(proxy) {
     '--disable-dev-shm-usage',
     '--disable-gpu',
     '--window-size=1920,1080',
+    '--disable-blink-features=AutomationControlled'
   ];
   if (proxy) {
     args.push(`--proxy-server=${proxy}`);
     console.log(`[Scraper] Using proxy: ${proxy.replace(/:[^@]*@/, ':***@')}`);
   }
-  return puppeteer.launch({ headless: 'new', args });
+  return puppeteer.launch({ 
+    headless: 'new', 
+    args,
+    ignoreHTTPSErrors: true,
+    defaultViewport: { width: 1280, height: 800 }
+  });
 }
 
 async function scrapeMenu(locationSlug, periodSlug, date, onStep = () => { }) {
@@ -293,18 +311,58 @@ async function scrapeMenu(locationSlug, periodSlug, date, onStep = () => { }) {
 
     const url = `https://dineoncampus.com/tamu/whats-on-the-menu/${locationSlug}/${date}/${periodSlug}`;
     console.log('[Scraper] Fetching:', url);
+
+    // --- DIRECT API FETCH FALLBACK ---
+    console.log(`[Scraper] Starting direct API attempt for ${locationSlug} on ${date}...`);
+    const loc = LOCATIONS.find(l => l.slug === locationSlug);
+    const per = PERIODS.find(p => p.slug === periodSlug);
+    if (loc && per) {
+        onStep('Attempting direct API connection...');
+        const fetch = require('node-fetch');
+        const siteId = '5751fd3190975b60e048929a'; // TAMU
+        const apiUrl = `https://api.dineoncampus.com/v1/location/menu?site_id=${siteId}&location_id=${loc.id}&period_id=${per.id}&date=${date}`;
+        console.log(`[Scraper] API URL: ${apiUrl}`);
+        try {
+            const apiRes = await fetch(apiUrl, {
+                headers: { 'User-Agent': userAgent, 'Accept': 'application/json' },
+                timeout: 10000
+            });
+            console.log(`[Scraper] API Response Status: ${apiRes.status}`);
+            if (apiRes.ok) {
+                const data = await apiRes.json();
+                console.log(`[Scraper] API JSON data received (keys: ${Object.keys(data).join(', ')})`);
+                const result = processMenuJson(data);
+                if (result && result.length > 0 && result.some(s => s.items.length > 0)) {
+                    console.log(`[Scraper] API result valid! Processed ${result.length} stations.`);
+                    return result;
+                } else {
+                    console.log('[Scraper] API result empty or missing items. Falling back to browser.');
+                }
+            } else {
+                console.log(`[Scraper] API request NOT OK: ${apiRes.status} ${apiRes.statusText}`);
+            }
+        } catch (e) {
+            console.log(`[Scraper] API fetch failed: ${e.message}. Falling back to browser.`);
+        }
+    } else {
+        console.warn(`[Scraper] Could not find loc/per mapping in constants. Loc: ${locationSlug}, Per: ${periodSlug}`);
+    }
+
+    console.log('[Scraper] Falling back to Puppeteer browser engine...');
     onStep(`Connecting to dineoncampus.com...`);
 
     // Random jitter to simulate human think-time between requests
     const jitter = Math.random() * 2000 + 1000;
     await new Promise(r => setTimeout(r, jitter));
 
+    console.log(`[Scraper] Navigating to ${url}...`);
     await page.goto(url, { waitUntil: 'networkidle0', timeout: 45000 });
 
     const title = await page.title();
     console.log('[Scraper] Page Title:', title);
 
     if (title.includes('Cloudflare') || title.includes('Attention Required')) {
+      console.warn('[Scraper] Bot protection detected via Page Title.');
       throw new Error('Blocked by Cloudflare bot protection.');
     }
 
@@ -327,41 +385,47 @@ async function scrapeMenu(locationSlug, periodSlug, date, onStep = () => { }) {
 
     onStep('Processing menu items...');
 
-    // Prioritize intercepted JSON data if it actually contains items
-    if (menuJson) {
-      console.log('[Scraper] Intercepted JSON detected, processing...');
-      const result = processMenuJson(menuJson);
-      if (result && result.length > 0 && result.some(s => s.items.length > 0)) {
-        console.log('[Scraper] Using rich JSON data with items.');
-        return result;
-      }
-      console.log('[Scraper] Intercepted JSON was empty or skeleton-only, checking HTML.');
-    }
+    onStep('Processing menu items...');
 
-    console.log('[Scraper] Falling back to HTML parsing or merging...');
     const html = await page.content();
     const htmlStations = parseMenuHtml(html);
     
+    let finalStations = [];
     if (menuJson) {
+      console.log('[Scraper] Intercepted JSON detected, processing and merging...');
       const jsonStations = processMenuJson(menuJson);
-      // Merge: Take HTML stations if they have more items or if JSON station is missing/empty
-      const finalStations = [...jsonStations];
-      
+      finalStations = [...jsonStations];
+
+      // Merge HTML stations into JSON stations
       htmlStations.forEach(hs => {
-        const js = finalStations.find(s => s.name.toLowerCase() === hs.name.toLowerCase());
+        // Normalize name for comparison (remove special chars, spaces, common suffixes)
+        const norm = (s) => s.toLowerCase().trim().replace(/[^a-z0-9]/g, '').replace(/station|ovens|category/g, '');
+        const hsNorm = norm(hs.name);
+        
+        const js = finalStations.find(s => norm(s.name) === hsNorm || s.name.toLowerCase() === hs.name.toLowerCase());
+        
         if (!js) {
           finalStations.push(hs);
         } else if (js.items.length === 0 && hs.items.length > 0) {
           // Replace empty JSON station with populated HTML station
           Object.assign(js, hs);
+        } else if (js.items.length > 0 && hs.items.length > js.items.length) {
+          // If HTML has significantly more items, maybe it's more up-to-date?
+          // (Dine On Campus sometimes has partial JSON)
+          // But JSON has better nutrient data, so we only merge missing items or use HTML if JSON is very sparse.
+          hs.items.forEach(hi => {
+             const exists = js.items.find(ji => ji.name.toLowerCase() === hi.name.toLowerCase());
+             if (!exists) js.items.push(hi);
+          });
         }
       });
-      console.log(`[Scraper] Merged JSON (${jsonStations.length}) and HTML (${htmlStations.length}) -> Final: ${finalStations.length}`);
-      return finalStations.filter(s => s.items.length > 0);
+      console.log(`[Scraper] Combined JSON (${jsonStations.length}) and HTML (${htmlStations.length}) -> Final: ${finalStations.length}`);
+    } else {
+      console.log('[Scraper] No JSON detected, using HTML parsing.');
+      finalStations = htmlStations;
     }
 
-    console.log('[Scraper] Found stations via HTML:', htmlStations.length);
-    return htmlStations.filter(s => s.items.length > 0);
+    return finalStations.filter(s => s.items.length > 0);
   } finally {
     await page.close();
     // Always close the browser so the proxy is truly released

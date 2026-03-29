@@ -228,6 +228,19 @@ function updateScrapeJobStatus(locationSlug, periodSlug, date, step) {
   upsertJob(getJobKey(locationSlug, periodSlug, date), 'scraping', null, null, step);
 }
 
+function deleteMenu(locationSlug, periodSlug, date) {
+  db.prepare('DELETE FROM menus WHERE location_slug=? AND period_slug=? AND date=?').run(locationSlug, periodSlug, date);
+}
+
+function deleteScrapeJob(locationSlug, periodSlug, date) {
+  db.prepare('DELETE FROM scrape_jobs WHERE key=?').run(getJobKey(locationSlug, periodSlug, date));
+}
+
+function clearStaleJobs() {
+  const result = db.prepare("DELETE FROM scrape_jobs WHERE status = 'scraping' OR status = 'pending'").run();
+  return result.changes;
+}
+
 function getAllLocations() {
   return LOCATIONS;
 }
@@ -372,10 +385,12 @@ module.exports = {
   getMealLogs,
   getMealLogsRange,
   deleteMealLog,
-  getMealLogsRange,
+  deleteMenu,
+  deleteScrapeJob,
   getShortcuts,
   saveShortcut,
   addWaitTime,
   getWaitTimeStats,
-  getWaitTimeStatsAll
+  getWaitTimeStatsAll,
+  clearStaleJobs
 };

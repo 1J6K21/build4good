@@ -10,7 +10,7 @@ const {
     getMenu, createScrapeJob, getScrapeJob, getAllLocations,
     cleanupMenus, getShortcuts, saveShortcut, updateMacroGoals,
     updateUserStats, updateTrackedNutrients, updateUserNutrients, updateUserGoals,
-    addWaitTime, getWaitTimeStats, getWaitTimeStatsAll
+    addWaitTime, getWaitTimeStats, getWaitTimeStatsAll, clearStaleJobs
 } = require('./db');
 
 // Run DB cleanup on startup
@@ -19,6 +19,13 @@ cleanupMenus(30);
 setInterval(() => cleanupMenus(30), 24 * 60 * 60 * 1000);
 
 const { startScrapeProcess } = require('./scraper');
+
+// --- STARTUP CLEANUP ---
+// Clear any "scraping" jobs that were orphaned when the server last stopped/crashed.
+const staleDeleted = clearStaleJobs();
+if (staleDeleted > 0) {
+    console.log(`[DB] Cleared ${staleDeleted} stale scrape jobs from previous session.`);
+}
 
 const fs = require('fs');
 
@@ -199,19 +206,34 @@ app.get('/api/menu', async (req, res) => {
     const { locationSlug, periodSlug, date, refresh } = req.query;
     console.log(`[API] Menu request: ${locationSlug} | ${periodSlug} | ${date} (refresh: ${refresh})`);
 
-    if (!locationSlug || !periodSlug || !date) return res.status(400).json({ error: 'Missing params' });
+    if (!locationSlug || !periodSlug || !date) {
+        console.warn('[API] Missing required parameters');
+        return res.status(400).json({ error: 'Missing params' });
+    }
 
-    const cached = await getMenu(locationSlug, periodSlug, date);
-    if (cached && refresh !== 'true') {
-        console.log(`[API] Cache HIT for ${locationSlug}`);
-        return res.json({ status: 'ready', stations: cached.stations });
+    if (refresh === 'true') {
+        console.log(`[API] Force Refresh: Clearing menu and jobs for ${locationSlug}`);
+        const { deleteMenu, deleteScrapeJob } = require('./db');
+        deleteMenu(locationSlug, periodSlug, date);
+        deleteScrapeJob(locationSlug, periodSlug, date);
+    } else {
+        const cached = await getMenu(locationSlug, periodSlug, date);
+        if (cached) {
+            console.log(`[API] Cache HIT for ${locationSlug}`);
+            return res.json({ status: 'ready', stations: cached.stations });
+        }
     }
 
     const job = await getScrapeJob(locationSlug, periodSlug, date);
     if (job) {
         console.log(`[API] Job existing for ${locationSlug}: ${job.status}`);
         if (job.status === 'failed') return res.json({ status: 'failed', error: job.error });
-        return res.json({ status: 'scraping', step: job.step || job.status });
+        if (job.status === 'ready' || job.status === 'done' || job.status === 'success') {
+          // If the job says ready but menu is missing (deleted), allow it to continue
+          console.log(`[API] Job says ready but menu might be missing, starting over.`);
+        } else {
+          return res.json({ status: 'scraping', step: job.step || job.status });
+        }
     }
 
     console.log(`[API] Starting NEW scrape job for ${locationSlug}`);

@@ -63,9 +63,141 @@
 
     <!-- ======================= DASHBOARD PAGE ======================= -->
     <div id="page-dashboard" class="page active">
-        <div class="container">
+        <div class="newspaper-layout">
+            <aside class="newspaper-sidebar left">
+                <div class="newspaper-column">
+                    <div class="news-clipping">
+                        <div class="clipping-header">AGGIE TRADITIONS</div>
+                        <h3 class="clipping-title">The Spirit of Aggieland</h3>
+                        <p class="clipping-text" style="font-size: 0.8rem;">"We've never been licked!" - The 12th Man remains ready to serve at a moment's notice. Remember to stand for the entirety of the game!</p>
+                        <div class="clipping-footer">Vol. 147 | Edition 1</div>
+                    </div>
+                    <div class="news-clipping">
+                        <div class="clipping-header">AGGIE HONOR</div>
+                        <h3 class="clipping-title">CODE OF HONOR</h3>
+                        <p class="clipping-text" style="font-weight: bold; border: 1px solid #000; padding: 10px; background: rgba(0,0,0,0.03);">"An Aggie does not lie, cheat or steal or tolerate those who do."</p>
+                    </div>
+                    <div class="news-clipping">
+                        <div class="clipping-header">SBISA FACT</div>
+                        <h3 class="clipping-title">Oldest Dining Hall</h3>
+                        <p class="clipping-text" style="font-size: 0.8rem;">Did you know Sbisa Dining Hall opened in 1912? It was named after Bernard Sbisa, the college's first steward.</p>
+                    </div>
+                    <div class="news-clipping">
+                        <div class="clipping-header">TRADITION CORNER</div>
+                        <ul class="clipping-list" style="font-size: 0.75rem;">
+                            <li style="margin-bottom: 8px;"><strong>SILVER TAPS:</strong> Held the first Tuesday of the month for students who passed.</li>
+                            <li style="margin-bottom: 8px;"><strong>MUSTER:</strong> April 21st. Softly call the roll of those absent.</li>
+                            <li><strong>ELEPHANT WALK:</strong> Seniors say goodbye to campus.</li>
+                        </ul>
+                    </div>
+                    <div class="news-clipping">
+                        <div class="clipping-header">CENTURY TREE</div>
+                        <h3 class="clipping-title">Oldest Aggie Tradition</h3>
+                        <p class="clipping-text" style="font-size: 0.82rem;">The legendary Century Tree stands near the academic building. It is said that if two people walk under it together, they will eventually marry.</p>
+                    </div>
+                    <div class="news-clipping clipping-pushed">
+                        <div class="clipping-header">QUICK TIPS</div>
+                        <ul class="clipping-list">
+                            <li>Gig 'em!</li>
+                            <li>Early birds get the best eggs at Sbisa.</li>
+                            <li>Don't forget your sports pass.</li>
+                            <li>Stand for the 12th Man.</li>
+                        </ul>
+                    </div>
+                    <div class="news-clipping">
+                        <div class="clipping-header">YELL PRACTICE</div>
+                        <h3 class="clipping-title">MIDNIGHT YELL</h3>
+                        <p class="clipping-text" style="font-size: 0.75rem;">Held at Kyle Field before home games. Join the Yell Leaders to get the stadium rocking. Warm up your pipes!</p>
+                    </div>
+                    <div class="news-clipping">
+                        <div class="clipping-header">CORPS OF CADETS</div>
+                        <h3 class="clipping-title">The Keeper of the Spirit</h3>
+                        <p class="clipping-text" style="font-size: 0.8rem;">Established in 1876, the Corps remains the largest uniformed student body in the nation outside the service academies. Proud members of the 12th Man.</p>
+                    </div>
+                    <div class="news-clipping">
+                        <div class="clipping-header">REVEILLE</div>
+                        <h3 class="clipping-title">MISS REVEILLE X</h3>
+                        <p class="clipping-text" style="font-size: 0.82rem;">The First Lady of Aggieland. If she barks in class, the professor is expected to dismiss the lecture immediately!</p>
+                    </div>
+                    <div class="news-clipping">
+                        <div class="clipping-header">THE AGGIE RING</div>
+                        <h3 class="clipping-title">A Symbol of Unity</h3>
+                        <p class="clipping-text" style="font-size: 0.78rem;">The most recognized collegiate ring in the world. It represents a promise to serve the state and nation. Gig 'em!</p>
+                    </div>
+                    <div class="news-clipping">
+                        <div class="clipping-header">GIG 'EM ORIGINS</div>
+                        <h3 class="clipping-title">Homer Norton, 1930</h3>
+                        <p class="clipping-text" style="font-size: 0.8rem;">Coach Homer Norton started the "Gig 'em" tradition at a yell practice. It's now the universal sign of Aggie approval.</p>
+                    </div>
+                    <div class="news-clipping">
+                        <div class="clipping-header">AGGIE VOCAB</div>
+                        <h3 class="clipping-title">Good Bull</h3>
+                        <p class="clipping-text" style="font-size: 0.78rem;">Phrase used to describe anything that follows the Aggie Code of Honor or shows great spirit.</p>
+                    </div>
+                </div>
+            </aside>
 
-            <!-- Hero row: calorie ring + quick stats -->
+            <div class="container">
+
+            <!-- Today's meals at the TOP -->
+            <div class="card meals-card full-width-card">
+                <div class="card-header">
+                    <div class="header-left">
+                        <h2>Today's Meals</h2>
+                        <span class="card-date" id="todayDateLabel"></span>
+                    </div>
+                    <div id="mealsBulkActions" class="bulk-actions" style="display: none;">
+                        <div class="bulk-count-group" style="display: flex; align-items: center; gap: 4px;">
+                            <span id="bulkCount" class="bulk-count">0 selected</span>
+                            <button class="bulk-clear-btn" onclick="clearMealSelection()" title="Clear Selection">✕</button>
+                        </div>
+                        <div class="bulk-btn-group" style="display: flex; gap: 8px;">
+                            <button class="btn btn-sm btn-primary" onclick="aggregateSelectedMeals()">
+                                <i class="fa-solid fa-calculator"></i> Summary
+                            </button>
+                            <button class="btn btn-sm btn-ghost" style="color: var(--red); border-color: rgba(239, 68, 68, 0.2);" onclick="removeSelectedMeals()">
+                                <i class="fa-solid fa-trash-can"></i> Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div id="todayMealsList" class="meals-list">
+                    <div class="empty-state">
+                        <div class="empty-icon">🥗</div>
+                        <p>No meals logged today.</p>
+                        <button class="btn btn-primary" onclick="showPage('menu')">Browse Menu</button>
+                    </div>
+                </div>
+            </div>
+
+    <!-- Aggregate Modal -->
+    <div id="aggregateModalBackdrop" class="modal-backdrop" onclick="closeAggregateModal()">
+        <div class="modal card glass" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2>Meal Summary</h2>
+                <button class="btn-close" onclick="closeAggregateModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div id="aggregateStatsGrid" class="aggregate-stats-grid">
+                    <!-- Populated by JS -->
+                </div>
+                <div class="form-group" style="margin-top: 20px;">
+                    <label>Copyable Meal Object (JSON)</label>
+                    <div class="copy-container">
+                        <pre id="copyableJson" class="code-block"></pre>
+                        <button class="btn btn-sm btn-ghost copy-btn" onclick="copyAggregateJson()">
+                            <i class="fa-solid fa-copy"></i> Copy
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" style="width: 100%;" onclick="closeAggregateModal()">Done</button>
+            </div>
+        </div>
+    </div>
+
+            <!-- Hero row: calorie ring + macros + quick log -->
             <div class="dashboard-hero">
                 <div class="calorie-ring-card card">
                     <div class="ring-label-top">Today's Calories</div>
@@ -149,28 +281,33 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="macro-card card add-tracker-card" onclick="openAddTrackerModal()">
-                            <div class="add-tracker-inner">
-                                <div class="add-icon">+</div>
-                                <div class="add-label">Tap to track something else</div>
+                    </div>
+                    
+                    <div class="hero-lower-row" style="display: flex; gap: 20px;">
+                        <!-- Adjusted Quick Log -->
+                        <div class="card shortcuts-card dashboard-shortcuts-inline" style="flex: 1;">
+                            <div class="card-header">
+                                <h2 style="font-size: 0.9rem;">⚡ Quick Log</h2>
+                                <span class="card-hint">Recent combos</span>
+                            </div>
+                            <div id="shortcutsList" class="shortcuts-list-horizontal">
+                                <div class="empty-state">
+                                    <p style="font-size: 0.75rem;">No shortcuts yet.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="streak-mini-col" style="width: 180px; display: flex; flex-direction: column; gap: 10px;">
+                            <div class="stat-card mini-stat card">
+                                <div class="stat-val" style="font-size: 1.2rem;" id="statMeals">0</div>
+                                <div class="stat-lbl" style="font-size: 0.7rem;">Meals</div>
+                            </div>
+                            <div class="stat-card mini-stat card">
+                                <div class="stat-val" style="font-size: 1.2rem;" id="statStreak">0</div>
+                                <div class="stat-lbl" style="font-size: 0.7rem;">Streak</div>
                             </div>
                         </div>
                     </div>
-                    <button class="goal-edit-btn" onclick="openGoalsModal()"
-                        style="margin-top: 1.5rem; width: 100%; padding: 12px; font-size: 0.8rem;">
-                        <i class="fa-solid fa-gear"></i> ADJUST MACRO GOALS
-                    </button>
-                </div>
-
-                <div class="stat-card card">
-                    <div class="stat-icon"><i class="fa-solid fa-fire"></i></div>
-                    <div class="stat-val" id="statMeals">0</div>
-                    <div class="stat-lbl">Meals Logged</div>
-                </div>
-                <div class="stat-card card">
-                    <div class="stat-icon"><i class="fa-solid fa-calendar-day"></i></div>
-                    <div class="stat-val" id="statStreak">0</div>
-                    <div class="stat-lbl">Day Streak</div>
                 </div>
 
             </div> <!-- End Hero -->
@@ -265,39 +402,80 @@
             </div>
 
         <!-- Today's log + shortcuts row -->
-        <div class="bottom-row">
 
-            <!-- Today's meals -->
-            <div class="card meals-card">
-                <div class="card-header">
-                    <h2>Today's Meals</h2>
-                    <span class="card-date" id="todayDateLabel"></span>
-                </div>
-                <div id="todayMealsList" class="meals-list">
-                    <div class="empty-state">
-                        <div class="empty-icon">🥗</div>
-                        <p>No meals logged today.</p>
-                        <button class="btn btn-primary" onclick="showPage('menu')">Browse Menu</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Shortcuts -->
-            <div class="card shortcuts-card">
-                <div class="card-header">
-                    <h2>⚡ Quick Log</h2>
-                    <span class="card-hint">Saved combos</span>
-                </div>
-                <div id="shortcutsList" class="shortcuts-list">
-                    <div class="empty-state">
-                        <div class="empty-icon"><i class="fa-solid fa-bookmark"></i></div>
-                        <p>Save a meal combo as a shortcut for fast logging.</p>
-                    </div>
-                </div>
-            </div>
         </div>
-
-    </div>
+            <aside class="newspaper-sidebar right">
+                <div class="newspaper-column">
+                    <div class="news-clipping">
+                        <div class="clipping-header">SCOREBOARD</div>
+                        <h3 class="clipping-title">BTHO CALORIES</h3>
+                        <div class="score-row">
+                            <span>YOU</span>
+                            <span>1</span>
+                        </div>
+                        <div class="score-row">
+                            <span>HUNGER</span>
+                            <span>0</span>
+                        </div>
+                    </div>
+                    <div class="news-clipping">
+                        <div class="clipping-header">WEATHER</div>
+                        <h3 class="clipping-title">College Station</h3>
+                        <p class="clipping-text">100% chance of Maroon & White. Humidity levels: Aggie Spirit Overflowing.</p>
+                    </div>
+                    <div class="news-clipping">
+                        <div class="clipping-header">AGGIE JARGON</div>
+                        <h3 class="clipping-title">WORD OF THE DAY</h3>
+                        <p class="clipping-text" style="font-weight: 700; font-size: 1.1rem; color: #500;">BTHO</p>
+                        <p class="clipping-text" style="font-style: italic;">verb. To beat the heck outta. Typically used before upcoming athletic events or calorie goals.</p>
+                    </div>
+                    <div class="news-clipping clipping-pushed">
+                        <img src="assets/logo-gray.jpg" alt="Aggie Logo" style="width:100%; margin-bottom: 10px; border: 1px solid #000; filter: grayscale(1);">
+                        <p class="clipping-text" style="font-size: 0.7rem; font-style: italic; text-align: center;">"Hullabaloo, Caneck! Caneck!<br>Hullabaloo, Caneck! Caneck!"</p>
+                    </div>
+                    <div class="news-clipping">
+                        <div class="clipping-header">CAMPUS NEWS</div>
+                        <h3 class="clipping-title">Reveille spotted!</h3>
+                        <p class="clipping-text">The First Lady of Aggieland was seen visiting a local dining hall today. Morale has reached an all-time high.</p>
+                    </div>
+                    <div class="news-clipping">
+                        <div class="clipping-header">AGGIE PRIDE</div>
+                        <h3 class="clipping-title">THE 12TH MAN</h3>
+                        <p class="clipping-text" style="font-size: 0.8rem;">We stand for the entirety of the game as a symbol of our readiness to serve if called upon. Home of the 12th Man since 1922.</p>
+                    </div>
+                    <div class="news-clipping">
+                        <div class="clipping-header">CAMPUS ETIQUETTE</div>
+                        <h3 class="clipping-title">THE MSC</h3>
+                        <p class="clipping-text" style="font-size: 0.8rem;">Please remove your hats when entering the Memorial Student Center to honor our fallen Aggies. Avoid walking on the grass around the facility.</p>
+                    </div>
+                    <div class="news-clipping">
+                        <div class="clipping-header">AGGIE WAR HYMN</div>
+                        <h3 class="clipping-title">"Saw Varsity's Horns Off"</h3>
+                        <p class="clipping-text" style="font-size: 0.75rem; font-style: italic;">Hullabaloo, Caneck! Caneck!<br>Hullabaloo, Caneck! Caneck!<br>Good-bye to Texas University!<br>So long to the orange and white!</p>
+                    </div>
+                    <div class="news-clipping">
+                        <div class="clipping-header">SILVER TAPS</div>
+                        <h3 class="clipping-title">First Tuesday</h3>
+                        <p class="clipping-text" style="font-size: 0.75rem;">Join us at the academic Plaza to honor our fellow Aggies who are no longer with us. The campus goes dark at 10 PM. Silent reflection is requested.</p>
+                    </div>
+                    <div class="news-clipping">
+                        <div class="clipping-header">THE TRADITION LIVES</div>
+                        <p class="clipping-text" style="font-size: 0.65rem; border-top: 1px dashed #000; padding-top: 10px;">"From the outside looking in, you can't understand it. From the inside looking out, you can't explain it." - E. King Gill</p>
+                    </div>
+                    <div class="news-clipping">
+                        <div class="clipping-header">OLD ARMY</div>
+                        <h3 class="clipping-title">CLASS OF '76</h3>
+                        <p class="clipping-text">Texas A&M opened its doors on Oct. 4, 1876, as the state's first public institution of higher learning.</p>
+                        <div class="clipping-footer">ESTB. 1876</div>
+                    </div>
+                    <div class="news-clipping">
+                        <div class="clipping-header">GIG 'EM AGGIES</div>
+                        <h3 class="clipping-title">Whoop!</h3>
+                        <p class="clipping-text" style="font-size: 0.75rem;">Yell used by upperclassmen and graduates to express approval or excitement. Freshmen are not permitted to yell "Whoop!"</p>
+                    </div>
+                </div>
+            </aside>
+        </div>
     </div>
 
     <!-- ======================= MENU PAGE ======================= -->
