@@ -500,6 +500,41 @@ async function refreshDashboard() {
         const banner = document.getElementById('dangerWindowBanner');
         if (banner) banner.style.display = 'none';
     }
+
+    try { generateBulletin(logs, totals, calGoal); } catch (e) { console.error(e); }
+}
+
+function generateBulletin(logs, totals, calGoal) {
+    const el = document.getElementById('bulletinText');
+    const dateEl = document.getElementById('bulletinDate');
+    if (!el) return;
+
+    const d = new Date((trackingDate || todayStr()) + 'T12:00:00');
+    if (dateEl) dateEl.textContent = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase();
+
+    let headline = "THE MINDFUL BULLETIN — CAMPUS TRADING NEWS & MACRO MOVES";
+    
+    if (logs.length === 0) {
+        headline = "THE CALM BEFORE THE CALORIES — FIRST LOG OF THE DAY AWAITS";
+    } else {
+        const pGoal = (currentUser && currentUser.protein_goal) ? currentUser.protein_goal : 60;
+        const pPct = (totals.p / pGoal) * 100;
+        const cPct = (totals.cal / calGoal) * 100;
+
+        if (cPct > 100) {
+            headline = "BUDGET QUOTAS EXCEEDED — CALORIE CEILING BREACHED BY ACTIVE TRADER";
+        } else if (pPct > 80) {
+            headline = "PROTEIN POWERHOUSE — CAMPUS USER REACHES ANABOLIC RECOVERY PEAK";
+        } else if (cPct > 75) {
+            headline = "THE LATE DAY LOG — CAUTION ADVISED AS CALORIE CEILING APPROACHES";
+        } else if (logs.length > 3) {
+            headline = "CONSISTENCY CLIMB — VOLUME TRADING DETECTED ACROSS FOUR MEALS";
+        } else if (totals.p > 30) {
+             headline = "THE PROTEIN RALLY — STEADY GAINS REPORTED IN THE MORNING SESSIONS";
+        }
+    }
+
+    el.textContent = headline;
 }
 
 async function calculateStreak() {
@@ -1174,7 +1209,7 @@ function renderMenu(stations, locName, period, date, waitStats = []) {
                 <i class="fa-solid fa-wand-magic-sparkles"></i> WHAT TO GET
             </button>
             <button class="btn btn-sm btn-ghost force-refresh-btn" onclick="forceRescrape()" title="Force Refresh Menu" style="opacity: 0.4; border: 1px solid var(--border); border-radius: 50%; width: 36px; height: 36px; padding: 0;">
-                <i class="fa-solid fa-arrows-rotate"></i>
+                <i class="fa-solid fa-rotate-right"></i>
             </button>
         </div>
     </div>

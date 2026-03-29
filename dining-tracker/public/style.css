@@ -284,6 +284,52 @@ body {
   padding: 0 !important;
 }
 
+/* ═══════════════════════════════════════════
+   Newspaper Bulletin Header
+   ═══════════════════════════════════════════ */
+.news-headline-bulletin {
+  grid-column: 1 / -1; /* Spans full width across sidebars */
+  grid-row: 1;
+  padding: 32px 0;
+  margin-bottom: 24px;
+  border-top: 3px solid #000;
+  border-bottom: 3px solid #000;
+  text-align: center;
+  background: #ffffff;
+}
+
+.bulletin-eyebrow {
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #000000;
+  margin-bottom: 8px;
+}
+
+.bulletin-text {
+  font-family: inherit; /* Maybe swap to serif if available */
+  font-size: 3.2rem;
+  font-weight: 900;
+  letter-spacing: -0.05em;
+  text-transform: uppercase;
+  color: #000000;
+  line-height: 0.95;
+  margin: 12px 0;
+}
+
+.bulletin-footer {
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid #000;
+  padding-top: 8px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: #000;
+}
+
 .card {
   background: var(--surface);
   border-radius: var(--radius);
@@ -481,7 +527,7 @@ body {
   display: grid;
   grid-template-columns: 320px 1fr;
   gap: 20px;
-  margin-top: 32px; /* Push the first content down, keeping white sidebars flush at top */
+  margin-top: 10px; /* Reduced from 32px since we added the bulletin */
   margin-bottom: 20px;
 }
 
@@ -2905,15 +2951,28 @@ body {
 
 /* Container Adjustments for Newspaper Layout */
 .newspaper-layout {
-  display: flex;
+  display: grid;
+  grid-template-columns: 300px 1fr 300px;
+  grid-template-rows: auto 1fr;
   min-height: calc(100vh - 66px);
   background: #ffffff; /* White sheet for sidebars */
   width: 100%;
   border-bottom: 2px solid #000;
-  align-items: stretch;
   margin-top: -2px !important;
   padding: 0 !important;
   border-top: 1px solid #000;
+}
+
+@media (max-width: 1400px) {
+  .newspaper-layout {
+    grid-template-columns: 260px 1fr 260px;
+  }
+}
+
+@media (max-width: 1250px) {
+  .newspaper-layout {
+    grid-template-columns: 1fr; /* Stacked layout or center only */
+  }
 }
 
 .newspaper-sidebar {
@@ -2931,12 +2990,23 @@ body {
   padding-top: 0;
 }
 
+.newspaper-sidebar.left {
+  border-left: none;
+  grid-column: 1;
+  grid-row: 2;
+}
+
 .newspaper-sidebar.right {
+  grid-column: 3;
+  grid-row: 2;
   border-right: none;
 }
 
-.newspaper-sidebar.left {
-  border-left: none;
+@media (max-width: 1250px) {
+    /* Sidebars hidden, everything stacks on column 1 */
+    .newspaper-sidebar.left, .newspaper-sidebar.right {
+        display: none;
+    }
 }
 
 .newspaper-column {
@@ -2953,6 +3023,8 @@ body {
 }
 
 .newspaper-layout .container {
+  grid-column: 2;
+  grid-row: 2;
   flex: 1;
   min-width: 0;
   max-width: none;
@@ -2962,14 +3034,14 @@ body {
   border-right: 1px solid rgba(0,0,0,0.1);
 }
 
-.meals-card.full-width-card {
-    margin-top: 32px; /* Push the first card down, borders stay flush */
+@media (max-width: 1250px) {
+    .newspaper-layout .container {
+        grid-column: 1 / -1;
+    }
 }
 
-@media (max-width: 1400px) {
-  .newspaper-sidebar {
-    width: 260px;
-  }
+.meals-card.full-width-card {
+    margin-top: 32px; /* Push the first card down, borders stay flush */
 }
 
 @media (max-width: 1250px) {
