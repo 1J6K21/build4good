@@ -619,6 +619,46 @@ function deleteExperimentLog(logId, experimentId) {
   db.prepare('DELETE FROM experiment_logs WHERE id = ? AND experiment_id = ?').run(logId, experimentId);
 }
 
+function getCalorieDebt(userId) {
+  const user = getUser(userId);
+  if (!user) return null;
+
+  const logs = db.prepare(`
+    SELECT date, SUM(calories) as dailyCals 
+    FROM meal_logs 
+    WHERE user_id = ? 
+    GROUP BY date 
+    ORDER BY date ASC
+  `).all(userId);
+
+  if (logs.length === 0) {
+    return {
+      totalDebtCal: 0,
+      lbsImpact: 0,
+      direction: 'neutral',
+      since: null,
+      daysTracked: 0
+    };
+  }
+
+  let totalDebt = 0;
+  logs.forEach(log => {
+    totalDebt += (log.dailyCals - user.calorie_goal);
+  });
+
+  const lbsImpact = parseFloat((totalDebt / 3500).toFixed(1));
+  const direction = totalDebt >= 0 ? 'surplus' : 'deficit';
+  const firstDate = logs[0].date;
+
+  return {
+    totalDebtCal: totalDebt,
+    lbsImpact: Math.abs(lbsImpact),
+    direction,
+    since: firstDate,
+    daysTracked: logs.length
+  };
+}
+
 module.exports = {
   db,
   getMenu,
@@ -660,5 +700,6 @@ module.exports = {
   getExperimentLogs,
   addExperimentLog,
   deleteExperiment,
-  deleteExperimentLog
+  deleteExperimentLog,
+  getCalorieDebt
 };

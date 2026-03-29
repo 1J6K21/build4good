@@ -15,6 +15,8 @@ let lastFetchedLogs = [];
 let futureChartInstance = null;
 let servingIncrement = 0.5;
 let trackingDate = null; // Will be initialized by todayStr() later
+let spotlightActive = false;
+let currentDayTotals = { cal: 0, p: 0, f: 0, c: 0, sodium: 0, fiber: 0, sugar: 0 };
 
 // ── Token Storage ─────────────────────────────
 function getToken() { return localStorage.getItem('auth_token'); }
@@ -120,6 +122,7 @@ function onLoginSuccess() {
     updateNavDateDisplay(trackingDate);
 
     showPage('dashboard');
+    updateCalorieDebtWidget();
 }
 
 async function logout() {
@@ -308,6 +311,51 @@ async function logGlobalItemByFdcId(fdcId, fName) {
 
 // ── Dashboard ─────────────────────────────
 
+async function updateCalorieDebtWidget() {
+    const el = document.getElementById('calorieDebtWidget');
+    if (!el) return;
+
+    try {
+        const res = await authFetch(`${API}/api/user/calorie-debt`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        if (data.daysTracked < 3) {
+            el.innerHTML = `
+                <div class="debt-lbs" style="color: var(--text-3)">Calculating...</div>
+                <div class="debt-since">New User</div>
+            `;
+            el.setAttribute('data-tooltip', 'Logging 3 or more days reveals your semester trajectory.');
+            return;
+        }
+
+        const sign = data.direction === 'surplus' ? '+' : '−';
+        const colorClass = data.direction === 'surplus' ? 'surplus' : 'deficit';
+        const impact = data.lbsImpact.toFixed(1);
+        
+        let sinceStr = 'SINCE ???';
+        if (data.since) {
+            const d = new Date(data.since + 'T12:00:00');
+            const month = d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+            const day = d.getDate();
+            sinceStr = `SINCE ${month} ${day}`;
+        }
+
+        el.innerHTML = `
+            <div class="debt-lbs ${colorClass}">${sign}${impact} lbs</div>
+            <div class="debt-since">${sinceStr}</div>
+        `;
+
+        const absCal = Math.abs(data.totalDebtCal).toLocaleString();
+        const overUnder = data.direction === 'surplus' ? 'above' : 'below';
+        const summary = `${sign}${absCal} cal ${overUnder} goal since your first log. That's roughly ${impact} lbs from dining alone.`;
+        el.setAttribute('data-tooltip', summary);
+
+    } catch (e) {
+        console.error('Failed to update calorie debt widget', e);
+    }
+}
+
 async function refreshDashboard() {
     if (!currentUser) return;
     
@@ -317,7 +365,7 @@ async function refreshDashboard() {
 
     const date = trackingDate || todayStr();
     const logs = await fetchLogs(date);
-    const totals = (logs || []).reduce((acc, l) => {
+    currentDayTotals = (logs || []).reduce((acc, l) => {
         acc.cal += (l.calories || 0);
         acc.p += (l.protein || 0);
         acc.f += (l.fat || 0);
@@ -327,6 +375,7 @@ async function refreshDashboard() {
         acc.sugar += (l.sugars || 0);
         return acc;
     }, { cal: 0, p: 0, f: 0, c: 0, sodium: 0, fiber: 0, sugar: 0 });
+    const totals = currentDayTotals;
 
     const calGoal = currentUser.calorie_goal || 2000;
     const proGoal = currentUser.protein_goal;
@@ -433,6 +482,7 @@ async function refreshDashboard() {
     try { updateWeightProjection(); } catch (e) { console.error(e); }
     try { updateFutureProjection(); } catch (e) { console.error(e); }
     try { updateInsights(); } catch (e) { console.error(e); }
+    try { updateCalorieDebtWidget(); } catch (e) { console.error(e); }
 
     // Danger Window Banner Integration
     if (sessionStorage.getItem('dangerDismissed_' + date) !== '1') {
@@ -492,6 +542,18 @@ async function calculateStreak() {
         if (stEl) {
             if (longest > 0) {
                 stEl.innerHTML = `🔥 ${longest}`;
+                
+                // Update Newspaper Clippings for streak
+                ['left', 'right'].forEach(side => {
+                    const container = document.getElementById(`dynamic-${side}-streak`);
+                    const titleEl = document.getElementById(`val-${side}-streak-title`);
+                    const descEl = document.getElementById(`val-${side}-streak-desc`);
+                    if (container && titleEl && descEl) {
+                        titleEl.textContent = `${longest} DAYS STRONG`;
+                        descEl.textContent = `You've maintained a consistent logging habit for ${longest} days. ${longest > 5 ? 'A remarkable showcase of discipline.' : 'A great start to your journey!'}`;
+                        container.style.display = 'block';
+                    }
+                });
             } else {
                 stEl.innerHTML = `—`;
             }
@@ -1107,82 +1169,211 @@ function renderMenu(stations, locName, period, date, waitStats = []) {
             <span style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-3); font-weight: 700;">Currently Viewing</span>
             <h1 class="location-title-main" style="font-size: 1.8rem; font-weight: 900; letter-spacing: -0.04em; margin-top: 4px;">${locName}</h1>
         </div>
-        <button class="btn btn-sm btn-ghost force-refresh-btn" onclick="forceRescrape()" title="Force Refresh Menu" style="opacity: 0.4; border: 1px solid var(--border); border-radius: 50%; width: 36px; height: 36px; padding: 0;">
-            <i class="fa-solid fa-arrows-rotate"></i>
-        </button>
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <button class="btn spotlight-btn ${spotlightActive ? 'active' : ''}" onclick="toggleSpotlight()" title="Spotlight: What to get">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> WHAT TO GET
+            </button>
+            <button class="btn btn-sm btn-ghost force-refresh-btn" onclick="forceRescrape()" title="Force Refresh Menu" style="opacity: 0.4; border: 1px solid var(--border); border-radius: 50%; width: 36px; height: 36px; padding: 0;">
+                <i class="fa-solid fa-arrows-rotate"></i>
+            </button>
+        </div>
     </div>
-    ` + visibleStations.map(s => {
-        const stats = waitStats.find(ws => ws.station_name === s.name);
-        let waitDisplay = '-- Wait';
-        if (stats) {
-            const avg = stats.avg;
-            if (avg < 60) waitDisplay = `${Math.round(avg)}s Wait`;
-            else waitDisplay = `${Math.round(avg / 60)}m Wait`;
-        }
+    ` + (spotlightActive ? getSpotlightHtml(visibleStations, waitStats, locSlug) : getStandardMenuHtml(visibleStations, waitStats, locSlug));
+}
 
-        return `
-        <div class="station-block">
-            <div class="station-header-row">
-                <div class="station-name">${s.name}</div>
-                <div class="station-wait-pill" id="pill-${s.name.replace(/\s+/g, '-')}">
-                    <i class="fa-solid fa-clock"></i> ${waitDisplay}
-                </div>
-            </div>
-            
-            <div class="wait-reporter-inline card">
-                <div class="reporter-header" onclick="toggleWaitReporter(this)">
-                    <div class="reporter-label">Is there a line at <strong>${s.name}</strong>?</div>
-                    <button class="btn btn-sm btn-ghost reporter-btn">
-                        <i class="fa-solid fa-pen-to-square"></i> Report Wait
-                    </button>
-                </div>
-                <div class="reporter-controls" style="display: none;">
-                    <div class="controls-inner">
-                        <input type="range" class="wait-slider-mini" min="0" max="14" step="1" value="3" 
-                            oninput="updateMiniWaitLabel(this)">
-                        <div class="slider-footer">
-                            <span class="wait-label-mini">1 min</span>
-                            <button class="btn btn-primary btn-sm" onclick="submitStationWaitTime('${locSlug}', '${s.name.replace(/'/g, "\\'")}', this)">Submit Report</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
+function toggleSpotlight() {
+    spotlightActive = !spotlightActive;
+    loadMenu();
+    if (spotlightActive) toast("Spotlight active: Highlighting the best options for your goals.");
+}
 
-            <div class="item-grid">
-                ${s.items.map(item => {
-            const isSelected = selectedItems.find(i => i.name === item.name);
-            const servings = isSelected ? isSelected.servings : 1;
-            return `
-                    <div class="menu-item ${isSelected ? 'selected' : ''}" id="item-${item.name.replace(/\s+/g, '-')}" onclick="toggleItem(this, ${JSON.stringify(item).replace(/"/g, '&quot;')})">
-                        <div class="item-name">${item.name}</div>
-                        <div class="item-badges">
-                            ${(item.badges || []).map(b => `<span class="badge badge-${b}">${b}</span>`).join('')}
-                        </div>
-                        <div class="item-cal">${item.calories} cal</div>
-                        <div class="item-macros-preview">
-                            <span class="item-macro">P <strong>${item.protein || 0}g</strong></span>
-                            <span class="item-macro">F <strong>${item.fat || 0}g</strong></span>
-                            <span class="item-macro">C <strong>${item.carbs || 0}g</strong></span>
-                        </div>
-                        ${getItemFlags(item)}
-                        <div class="item-serving-controls" onclick="event.stopPropagation()">
-                            <div class="stepper">
-                                <button class="step-btn" onclick="changeServings('${item.name.replace(/'/g, "\\'")}', -1)">−</button>
-                                <span class="serving-val">${servings}</span>
-                                <button class="step-btn" onclick="changeServings('${item.name.replace(/'/g, "\\'")}', 1)">+</button>
-                            </div>
-                            <div class="increment-toggle">
-                                <button class="inc-btn ${servingIncrement === 0.1 ? 'active' : ''}" onclick="setServingIncrement(0.1)">.1</button>
-                                <button class="inc-btn ${servingIncrement === 0.5 ? 'active' : ''}" onclick="setServingIncrement(0.5)">.5</button>
-                                <button class="inc-btn ${servingIncrement === 1.0 ? 'active' : ''}" onclick="setServingIncrement(1.0)">1</button>
-                            </div>
-                        </div>
-                    </div>
-                `}).join('')}
+function scoreFoodItem(item) {
+    if (!currentUser) return { score: 0, type: 'neutral' };
+
+    const pro = item.protein || 0;
+    const fib = item.fiber || 0;
+    const cal = item.calories || 0;
+    const sugar = item.sugars || 0;
+    const satFat = item.saturated_fat || 0;
+
+    // 1. Heuristic Identity Check (Topping vs. Meal)
+    // A 'Modifier' (topping) is typically low calorie OR high density in small volume
+    // We detect it by calorie count (< 80) or specific keywords
+    const toppingKeywords = [
+        'sauce', 'dressing', 'topping', 'condiment', 'butter', 'oil', 
+        'mayo', 'mustard', 'relish', 'onion', 'olive', 'pickles', 'salsa', 
+        'jalapeno', 'crouton', 'seeds', 'nuts', 'vinaigrette', 'pesto', 'hummus',
+        'guacamole', 'sour cream', 'bacon bits', 'cilantro', 'garlic', 'cheese'
+    ];
+    const isModifierHeuristic = (cal < 80 && pro < 12) || toppingKeywords.some(k => item.name.toLowerCase().includes(k));
+
+    // 2. Adaptive Weights based on what the user NEEDS
+    const goals = { 
+        cal: currentUser.calorie_goal || 2000, 
+        p: currentUser.protein_goal || 60
+    };
+    const remaining = {
+        cal: goals.cal - currentDayTotals.cal,
+        p: Math.max(0, goals.p - currentDayTotals.p)
+    };
+
+    let proWeight = remaining.p > 40 ? 6 : 3;
+    let calPenaltyWeight = remaining.cal < 400 ? 0.25 : 0.05;
+
+    // Base nutritional score
+    let score = (pro * proWeight) + (fib * 5) - (cal * calPenaltyWeight) - (sugar * 2) - (satFat * 3);
+
+    // 3. Classification
+    let type = 'neutral';
+    
+    if (isModifierHeuristic) {
+        // High-quality modifiers (low sugar/satfat) stay green but don't become "Top Picks"
+        if (score > 2) type = 'modifier-good';
+        else if (score < -5) type = 'modifier-bad';
+        else type = 'modifier-neutral';
+        
+        // Boost modifiers so they aren't dimmed unnecessarily
+        score = Math.max(-5, Math.min(score, 5)); 
+    } else {
+        // Main meals
+        if (score >= 12) type = 'meal-top';
+        else if (score < -10) type = 'meal-heavy';
+    }
+
+    return { score, type };
+}
+
+function getSpotlightHtml(stations, waitStats, locSlug) {
+    const scoredStations = stations.map(s => {
+        const itemsWithScores = s.items.map(item => {
+            const { score, type } = scoreFoodItem(item);
+            return { ...item, _score: score, _type: type };
+        });
+
+        // Station score = weight the substantial meals more than the modifications
+        const meals = itemsWithScores.filter(i => i._type.startsWith('meal'));
+        const modifiers = itemsWithScores.filter(i => i._type.startsWith('modifier'));
+        
+        // A station's "Recommendation Level" is driven by its best meal, 
+        // but buffered by how many 'bad' modifiers it has.
+        let stationScore = meals.length > 0 
+            ? Math.max(...meals.map(m => m._score)) 
+            : (modifiers.length > 0 ? (modifiers.reduce((sum, i) => sum + i._score, 0) / modifiers.length) : -99);
+
+        return { ...s, items: itemsWithScores, _stationScore: stationScore };
+    });
+
+    scoredStations.sort((a, b) => b._stationScore - a._stationScore);
+
+    return scoredStations.map(s => renderStation(s, waitStats, locSlug, true)).join('');
+}
+
+function getStandardMenuHtml(stations, waitStats, locSlug) {
+    return stations.map(s => renderStation(s, waitStats, locSlug, false)).join('');
+}
+
+function renderStation(s, waitStats, locSlug, isSpotlight) {
+    const stats = waitStats.find(ws => ws.station_name === s.name);
+    let waitDisplay = '-- Wait';
+    if (stats) {
+        const avg = stats.avg;
+        if (avg < 60) waitDisplay = `${Math.round(avg)}s Wait`;
+        else waitDisplay = `${Math.round(avg / 60)}m Wait`;
+    }
+
+    // Within station, sort items if spotlight is active (except toppings)
+    const items = [...s.items];
+    if (isSpotlight && !s._isToppingStation) {
+        items.sort((a, b) => b._score - a._score);
+    }
+
+    return `
+    <div class="station-block ${isSpotlight && s._stationScore < -5 && !s._isToppingStation ? 'station-dimmed' : ''}">
+        <div class="station-header-row">
+            <div class="station-name">${s.name}</div>
+            <div class="station-wait-pill" id="pill-${s.name.replace(/\s+/g, '-')}">
+                <i class="fa-solid fa-clock"></i> ${waitDisplay}
             </div>
         </div>
-    `}).join('');
+        
+        <div class="wait-reporter-inline card">
+            <div class="reporter-header" onclick="toggleWaitReporter(this)">
+                <div class="reporter-label">Is there a line at <strong>${s.name}</strong>?</div>
+                <button class="btn btn-sm btn-ghost reporter-btn">
+                    <i class="fa-solid fa-pen-to-square"></i> Report Wait
+                </button>
+            </div>
+            <div class="reporter-controls" style="display: none;">
+                <div class="controls-inner">
+                    <input type="range" class="wait-slider-mini" min="0" max="14" step="1" value="3" 
+                        oninput="updateMiniWaitLabel(this)">
+                    <div class="slider-footer">
+                        <span class="wait-label-mini">1 min</span>
+                        <button class="btn btn-primary btn-sm" onclick="submitStationWaitTime('${locSlug}', '${s.name.replace(/'/g, "\\'")}', this)">Submit Report</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="item-grid">
+            ${items.map(item => renderItem(item, isSpotlight)).join('')}
+        </div>
+    </div>
+    `;
 }
+
+function renderItem(item, isSpotlight) {
+    const isSelected = selectedItems.find(i => i.name === item.name);
+    const servings = isSelected ? isSelected.servings : 1;
+    
+    let spotlightClass = '';
+    let spotlightBadge = '';
+    
+    if (isSpotlight) {
+        if (item._type === 'meal-top') {
+            spotlightClass = 'spotlight-highlight';
+            spotlightBadge = '<div class="spotlight-badge recommend"><i class="fa-solid fa-star"></i> TOP PICK</div>';
+        } else if (item._type === 'modifier-good') {
+            spotlightClass = 'spotlight-modifier';
+            spotlightBadge = '<div class="spotlight-badge modifier"><i class="fa-solid fa-plus"></i> GOOD ADD-ON</div>';
+        } else if (item._type === 'meal-heavy') {
+            spotlightClass = 'spotlight-dim';
+            spotlightBadge = '<div class="spotlight-badge heavy"><i class="fa-solid fa-weight-hanging"></i> HEAVY</div>';
+        } else if (item._type === 'modifier-bad') {
+             spotlightClass = 'spotlight-dim-soft';
+        }
+    }
+
+    return `
+    <div class="menu-item ${isSelected ? 'selected' : ''} ${spotlightClass}" id="item-${item.name.replace(/\s+/g, '-')}" onclick="toggleItem(this, ${JSON.stringify(item).replace(/"/g, '&quot;')})">
+        ${spotlightBadge}
+        <div class="item-name">${item.name}</div>
+        <div class="item-badges">
+            ${(item.badges || []).map(b => `<span class="badge badge-${b}">${b}</span>`).join('')}
+        </div>
+        <div class="item-cal">${item.calories} cal</div>
+        <div class="item-macros-preview">
+            <span class="item-macro">P <strong>${item.protein || 0}g</strong></span>
+            <span class="item-macro">F <strong>${item.fat || 0}g</strong></span>
+            <span class="item-macro">C <strong>${item.carbs || 0}g</strong></span>
+        </div>
+        ${getItemFlags(item)}
+        <div class="item-serving-controls" onclick="event.stopPropagation()">
+            <div class="stepper">
+                <button class="step-btn" onclick="changeServings('${item.name.replace(/'/g, "\\'")}', -1)">−</button>
+                <span class="serving-val">${servings}</span>
+                <button class="step-btn" onclick="changeServings('${item.name.replace(/'/g, "\\'")}', 1)">+</button>
+            </div>
+            <div class="increment-toggle">
+                <button class="inc-btn ${servingIncrement === 0.1 ? 'active' : ''}" onclick="setServingIncrement(0.1)">.1</button>
+                <button class="inc-btn ${servingIncrement === 0.5 ? 'active' : ''}" onclick="setServingIncrement(0.5)">.5</button>
+                <button class="inc-btn ${servingIncrement === 1.0 ? 'active' : ''}" onclick="setServingIncrement(1.0)">1</button>
+            </div>
+        </div>
+    </div>
+    `;
+}
+
 function getItemFlags(item) {
     const flags = [];
     const cal = item.calories || 0;
@@ -1537,6 +1728,7 @@ async function confirmLog() {
     }
     // Update projection immediately after logging
     updateWeightProjection();
+    updateCalorieDebtWidget();
 }
 
 function showLoading(show) { 
@@ -2624,6 +2816,7 @@ async function updateInsights() {
         renderDangerDayInsight(logs);
         renderMealHeatmapInsight(logs);
         renderCulpritInsight(logs);
+        updateNewspaperClippings(logs);
     } catch(e) {
         console.error('[Insights] Failed to load:', e);
     }
@@ -2973,6 +3166,84 @@ function renderCulpritInsight(logs) {
     document.getElementById('splitCarbsPct').textContent   = carbPct + '%';
     document.getElementById('splitFatPct').textContent     = fatPct  + '%';
     if (macrocalSplit) macrocalSplit.style.display = 'block';
+}
+
+/**
+ * Updates the Newspaper Clippings in the sidebars with dynamic personalized data.
+ */
+function updateNewspaperClippings(logs) {
+    if (!logs || !logs.length) return;
+
+    // 1. Most Logged Item
+    const itemFreq = {};
+    logs.forEach(l => {
+        const name = l.item_name || 'Unknown';
+        itemFreq[name] = (itemFreq[name] || 0) + (l.serving_size || 1);
+    });
+    const sortedItems = Object.entries(itemFreq).sort((a,b) => b[1] - a[1]);
+    const topItem = sortedItems[0];
+
+    if (topItem) {
+        const name = topItem[0];
+        const count = Math.round(topItem[1] * 10) / 10;
+        const totalCals = logs.filter(l => l.item_name === name).reduce((sum, l) => sum + (l.calories || 0), 0);
+
+        const title = name.toUpperCase();
+        const desc = `You've consumed ${count} serving${count !== 1 ? 's' : ''} of ${name} recently, totaling ${totalCals.toLocaleString()} calories. A consistent favorite in your diet.`;
+
+        ['left', 'right'].forEach(side => {
+            const container = document.getElementById(`dynamic-${side}-most-logged`);
+            const titleEl = document.getElementById(`val-${side}-most-logged-title`);
+            const descEl = document.getElementById(`val-${side}-most-logged-desc`);
+            if (container && titleEl && descEl) {
+                titleEl.textContent = title;
+                descEl.textContent = desc;
+                container.style.display = 'block';
+            }
+        });
+    }
+
+    // 2. Biggest Danger Day (from logs)
+    const dayCals = [0,0,0,0,0,0,0];
+    const dayCount = [0,0,0,0,0,0,0];
+    const seenDates = {};
+    logs.forEach(l => {
+        const dow = new Date(l.date + 'T12:00:00').getDay();
+        dayCals[dow] += (l.calories || 0);
+        const key = `${dow}_${l.date}`;
+        if (!seenDates[key]) {
+            seenDates[key] = true;
+            dayCount[dow]++;
+        }
+    });
+    const avgCals = dayCals.map((c, i) => dayCount[i] > 0 ? Math.round(c / dayCount[i]) : 0);
+    const maxIdx = avgCals.indexOf(Math.max(...avgCals));
+    const DAY_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+    if (avgCals[maxIdx] > 0) {
+        const dayName = DAY_FULL[maxIdx];
+        const avg = avgCals[maxIdx];
+        const calGoal = currentUser.calorie_goal || 2000;
+        const diff = avg - calGoal;
+
+        const title = `${dayName.toUpperCase()}S ALERT`;
+        const desc = `On average, you consume ${avg.toLocaleString()} calories on ${dayName}s. ${diff > 0 ? `That's ${diff} over your daily goal.` : 'Keep up the discipline!'}`;
+
+        ['left', 'right'].forEach(side => {
+            const container = document.getElementById(`dynamic-${side}-dangerDay`);
+            const titleEl = document.getElementById(`val-${side}-dangerDay-title`);
+            const descEl = document.getElementById(`val-${side}-dangerDay-desc`);
+            if (container && titleEl && descEl) {
+                titleEl.textContent = title;
+                descEl.textContent = desc;
+                container.style.display = 'block';
+            }
+        });
+    }
+
+    // 3. Longest Streak (We'll wait for calculateStreak to finish or use its result)
+    // Actually, calculateStreak is async and updates the DOM. We can just poll or call it.
+    // Let's modify calculateStreak to also update the clippings.
 }
 
 // ── EXTERNAL CALORIES GAP FILLER ───────────

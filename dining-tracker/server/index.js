@@ -13,7 +13,7 @@ const {
     addWaitTime, getWaitTimeStats, getWaitTimeStatsAll, clearStaleJobs,
     updateExperimentStatus, getExperimentLogs, addExperimentLog, deleteExperiment,
     deleteExperimentLog, getExperiments, createExperiment,
-    getLeaderboard, getTopItems, findDiningTwin
+    getLeaderboard, getTopItems, findDiningTwin, getCalorieDebt
 } = require('./db');
 
 // Run DB cleanup on startup
@@ -142,6 +142,12 @@ app.post('/api/user/logs', authenticateToken, async (req, res) => {
         item.fiber, item.sugars, item.saturated_fat, item.trans_fat, item.cholesterol
     );
     res.json({ success: true });
+});
+
+app.get('/api/user/calorie-debt', authenticateToken, async (req, res) => {
+    const stats = getCalorieDebt(req.user.id);
+    if (!stats) return res.status(404).json({ error: 'User not found' });
+    res.json(stats);
 });
 
 app.get('/api/user/shortcuts', authenticateToken, async (req, res) => {

@@ -73,7 +73,7 @@
                             </button></li>
                     </div>
                 </div>
-
+                <div id="calorieDebtWidget" class="nav-debt-widget"></div>
             </div>
         </div>
     </nav>
@@ -83,6 +83,16 @@
         <div class="newspaper-layout">
             <aside class="newspaper-sidebar left">
                 <div class="newspaper-column">
+                    <div id="dynamic-left-most-logged" class="news-clipping" style="display:none">
+                        <div class="clipping-header">MOST LOGGED ITEM</div>
+                        <h3 class="clipping-title" id="val-left-most-logged-title">---</h3>
+                        <p class="clipping-text" id="val-left-most-logged-desc">---</p>
+                    </div>
+                    <div id="dynamic-left-streak" class="news-clipping" style="display:none">
+                        <div class="clipping-header">LONGEST STREAK</div>
+                        <h3 class="clipping-title" id="val-left-streak-title">---</h3>
+                        <p class="clipping-text" id="val-left-streak-desc">---</p>
+                    </div>
                     <div class="news-clipping">
                         <div class="clipping-header">NUTRITION TIPS</div>
                         <h3 class="clipping-title">Mindful Eating</h3>
@@ -630,6 +640,11 @@
         </div>
             <aside class="newspaper-sidebar right">
                 <div class="newspaper-column">
+                    <div id="dynamic-right-dangerDay" class="news-clipping" style="display:none">
+                        <div class="clipping-header">WEEKLY RISK</div>
+                        <h3 class="clipping-title" id="val-right-dangerDay-title">---</h3>
+                        <p class="clipping-text" id="val-right-dangerDay-desc">---</p>
+                    </div>
                     <div class="news-clipping">
                         <div class="clipping-header">NUTRITION STATS</div>
                         <h3 class="clipping-title">GOAL TRACKER</h3>
@@ -642,6 +657,10 @@
                             <span>--</span>
                         </div>
                     </div>
+                    <div class="news-clipping clipping-pushed">
+                        <img src="assets/logo-gray.jpg" alt="Mindful Macros Logo" style="width:100%; margin-bottom: 10px; border: 1px solid #000; filter: grayscale(1);">
+                        <p class="clipping-text" style="font-size: 0.7rem; font-style: italic; text-align: center;">Mindful Macros: Your Personal Nutritional Companion.</p>
+                    </div>
                     <div class="news-clipping">
                         <div class="clipping-header">CAMPUS LIFE</div>
                         <h3 class="clipping-title">Daily Outlook</h3>
@@ -652,10 +671,6 @@
                         <h3 class="clipping-title">WORD OF THE DAY</h3>
                         <p class="clipping-text" style="font-weight: 700; font-size: 1.1rem; color: #000;">BIOAVAILABILITY</p>
                         <p class="clipping-text" style="font-style: italic;">noun. The proportion of a nutrient that is digested, absorbed and metabolized through normal pathways.</p>
-                    </div>
-                    <div class="news-clipping clipping-pushed">
-                        <img src="assets/logo-gray.jpg" alt="Mindful Macros Logo" style="width:100%; margin-bottom: 10px; border: 1px solid #000; filter: grayscale(1);">
-                        <p class="clipping-text" style="font-size: 0.7rem; font-style: italic; text-align: center;">Mindful Macros: Your Personal Nutritional Companion.</p>
                     </div>
                     <div class="news-clipping">
                         <div class="clipping-header">DINING NEWS</div>
@@ -1040,21 +1055,21 @@
             <div class="modal-body">
                 <div class="form-group">
                     <label>Daily Calorie Goal</label>
-                    <input type="number" id="goalCaloriesInput" class="filter-date" placeholder="2000" />
+                    <input type="number" id="goalCaloriesInput" class="form-input" style="width: 100%;" placeholder="2000" />
                 </div>
                 <div class="macro-goal-grid"
                     style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 15px;">
                     <div class="form-group">
                         <label>Protein (g)</label>
-                        <input type="number" id="goalProteinInput" class="filter-date" placeholder="100" />
+                        <input type="number" id="goalProteinInput" class="form-input" style="width: 100%;" placeholder="100" />
                     </div>
                     <div class="form-group">
                         <label>Fats (g)</label>
-                        <input type="number" id="goalFatInput" class="filter-date" placeholder="70" />
+                        <input type="number" id="goalFatInput" class="form-input" style="width: 100%;" placeholder="70" />
                     </div>
                     <div class="form-group">
                         <label>Carbs (g)</label>
-                        <input type="number" id="goalCarbInput" class="filter-date" placeholder="250" />
+                        <input type="number" id="goalCarbInput" class="form-input" style="width: 100%;" placeholder="250" />
                     </div>
                 </div>
 
@@ -1066,19 +1081,19 @@
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                         <div class="form-group">
                             <label>Height (in)</label>
-                            <input type="number" id="userHeight" class="filter-date" placeholder="70"
+                            <input type="number" id="userHeight" class="form-input" style="width: 100%;" placeholder="70"
                                 oninput="calculateAdvisorSuggested()" />
                         </div>
                         <div class="form-group">
                             <label>Weight (lbs)</label>
-                            <input type="number" id="userWeight" class="filter-date" placeholder="180"
+                            <input type="number" id="userWeight" class="form-input" style="width: 100%;" placeholder="180"
                                 oninput="calculateAdvisorSuggested()" />
                         </div>
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
                         <div class="form-group">
                             <label>Activity Level</label>
-                            <select id="userActivity" class="filter-date" style="padding: 10px; width: 100%;" onchange="calculateAdvisorSuggested()">
+                            <select id="userActivity" class="form-input" style="width: 100%;" onchange="calculateAdvisorSuggested()">
                                 <option value="1.2">Sedentary</option>
                                 <option value="1.375">Lightly Active</option>
                                 <option value="1.55" selected>Moderately Active</option>
@@ -1088,7 +1103,7 @@
                         </div>
                         <div class="form-group">
                             <label>Goal</label>
-                            <select id="userGoal" class="filter-date" style="padding: 10px; width: 100%;" onchange="calculateAdvisorSuggested()">
+                            <select id="userGoal" class="form-input" style="width: 100%;" onchange="calculateAdvisorSuggested()">
                                 <option value="-500">Cut (-1 lb/wk)</option>
                                 <option value="-250">Cut (-0.5 lb/wk)</option>
                                 <option value="0" selected>Maintain Weight</option>
