@@ -11,7 +11,7 @@ const {
     cleanupMenus, getShortcuts, saveShortcut, updateMacroGoals,
     updateUserStats, updateTrackedNutrients, updateUserNutrients, updateUserGoals,
     addWaitTime, getWaitTimeStats, getWaitTimeStatsAll, clearStaleJobs,
-    getLeaderboard, findDiningTwin, getExperiments, createExperiment,
+    getLeaderboard, getTopItems, findDiningTwin, getExperiments, createExperiment,
     updateExperimentStatus, getExperimentLogs, addExperimentLog
 } = require('./db');
 
@@ -216,6 +216,17 @@ app.get('/api/external/food/:fdcId', authenticateToken, async (req, res) => {
     } catch (e) {
         console.error('USDA Detail Error:', e);
         res.status(500).json({ error: 'FDC detail failed' });
+    }
+});
+
+app.get('/api/leaderboard/top', async (req, res) => {
+    const limit = parseInt(req.query.limit || '10');
+    try {
+        const topItems = getTopItems(limit);
+        res.json(topItems);
+    } catch (e) {
+        console.error('Error fetching top items:', e);
+        res.status(500).json({ error: 'Server error' });
     }
 });
 

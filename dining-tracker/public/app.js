@@ -181,7 +181,10 @@ function showPage(name) {
     }
     if (name === 'dashboard') refreshDashboard();
     if (name === 'menu') initMenuPage();
-    if (name === 'leaderboard') fetchLeaderboard();
+    if (name === 'leaderboard') {
+        fetchTopLeaderboard();
+        fetchLeaderboard();
+    }
     if (name === 'mirror') fetchMirror();
     if (name === 'experiments') fetchExperiments();
 }
@@ -412,6 +415,95 @@ async function refreshDashboard() {
     try { updateWeightProjection(); } catch (e) { console.error(e); }
     try { updateFutureProjection(); } catch (e) { console.error(e); }
     try { updateInsights(); } catch (e) { console.error(e); }
+
+    // Danger Window Banner Integration
+    if (sessionStorage.getItem('dangerDismissed_' + date) !== '1') {
+        getDangerWindowState(logs, date).then(state => {
+            const banner = document.getElementById('dangerWindowBanner');
+            const msgEl = document.getElementById('dangerWindowMessage');
+            if (state && banner && msgEl) {
+                msgEl.textContent = state.message;
+                banner.style.display = 'block';
+            } else if (banner) {
+                banner.style.display = 'none';
+            }
+        });
+    } else {
+        const banner = document.getElementById('dangerWindowBanner');
+        if (banner) banner.style.display = 'none';
+    }
+}
+
+async function getDangerWindowState(logs, trackingDate) {
+    const end = trackingDate || todayStr();
+    const startDate = new Date(end + 'T12:00:00');
+    startDate.setDate(startDate.getDate() - 28);
+    const start = formatDate(startDate);
+
+    try {
+        const res = await authFetch(`${API}/api/user/logs-range?start=${start}&end=${end}`);
+        const data = await res.json();
+        const allLogs = data.logs || [];
+
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const currentDayNum = new Date(end + 'T12:00:00').getDay();
+        const todayCaloriesSoFar = logs.reduce((sum, l) => sum + (l.calories || 0), 0);
+
+        // Demo fallback if no data yet
+        if (allLogs.length === 0) {
+            if (days[currentDayNum] === 'Thursday') {
+                return {
+                    isDangerWindow: true,
+                    dangerDayOfWeek: "Thursday",
+                    avgCaloriesOnDangerDay: 2710,
+                    todayCaloriesSoFar: todayCaloriesSoFar,
+                    message: "⚠️ DANGER WINDOW — Thursdays are historically your highest calorie day. Log your meals carefully today."
+                };
+            }
+            return null;
+        }
+
+        const dayTotals = {};
+        allLogs.forEach(log => {
+            const d = new Date(log.date + 'T12:00:00').getDay();
+            if (!dayTotals[d]) dayTotals[d] = {};
+            if (!dayTotals[d][log.date]) dayTotals[d][log.date] = 0;
+            dayTotals[d][log.date] += (log.calories || 0);
+        });
+
+        let dangerDayOfWeekNum = -1;
+        let maxAvg = -1;
+        for (let d = 0; d < 7; d++) {
+            if (dayTotals[d]) {
+                const values = Object.values(dayTotals[d]);
+                const avg = values.reduce((a, b) => a + b, 0) / values.length;
+                if (avg > maxAvg) {
+                    maxAvg = avg;
+                    dangerDayOfWeekNum = d;
+                }
+            }
+        }
+
+        if (dangerDayOfWeekNum === currentDayNum) {
+            return {
+                isDangerWindow: true,
+                dangerDayOfWeek: days[dangerDayOfWeekNum],
+                avgCaloriesOnDangerDay: Math.round(maxAvg),
+                todayCaloriesSoFar: Math.round(todayCaloriesSoFar),
+                message: `⚠️ DANGER WINDOW — ${days[dangerDayOfWeekNum]}s avg ${Math.round(maxAvg).toLocaleString()} cal for you. You're at ${Math.round(todayCaloriesSoFar).toLocaleString()} today. Stay on track.`
+            };
+        }
+    } catch (e) {
+        console.error("Danger window logic failed", e);
+    }
+    return null;
+}
+
+function dismissDangerBanner() {
+    const date = trackingDate || todayStr();
+    sessionStorage.setItem('dangerDismissed_' + date, '1');
+    const banner = document.getElementById('dangerWindowBanner');
+    if (banner) banner.style.display = 'none';
 }
 
 async function renderShortcuts() {
@@ -1994,6 +2086,7 @@ async function updateWeightProjection() {
             tdee = Math.round(bmr * 1.4);
         }
 
+        const projectionDays = parseInt(document.getElementById('projectionPeriod')?.value || '90');
         const surplus = dailyCals - tdee;
         const totalSurplus = surplus * projectionDays;
         const weightChange = totalSurplus / 3500;
@@ -2021,114 +2114,139 @@ async function updateWeightProjection() {
     }
 }
 
-let lastSimBaseline = null;
+window.simBaseline = null;
+let lastWeightDelta = 0;
+
+async function initSimulatorBaseline() {
+    if (window.simBaseline) return window.simBaseline;
+    
+    console.log("[Simulator] Initializing baseline from last 14 days...");
+    let endD = new Date();
+    let startD = new Date();
+    startD.setDate(endD.getDate() - 13); // 14 days total
+    
+    const startStr = formatDate(startD);
+    const endStr = formatDate(endD);
+    
+    try {
+        const res = await authFetch(`${API}/api/user/logs-range?start=${startStr}&end=${endStr}`);
+        const data = await res.json();
+        const logs = data.logs || [];
+        
+        const days = 14;
+        const breakdown = logs.reduce((acc, l) => {
+            let mt = (l.meal_type || 'snack').toLowerCase();
+            if (mt === 'brunch') mt = 'lunch';
+            if (acc[mt] !== undefined) acc[mt] += (l.calories || 0);
+            else acc.snack += (l.calories || 0);
+            return acc;
+        }, { breakfast: 0, lunch: 0, dinner: 0, snack: 0 });
+        
+        window.simBaseline = {
+            breakfast: Math.round(breakdown.breakfast / days),
+            lunch: Math.round(breakdown.lunch / days),
+            dinner: Math.round(breakdown.dinner / days),
+            snack: Math.round(breakdown.snack / days),
+            total: Math.round((breakdown.breakfast + breakdown.lunch + breakdown.dinner + breakdown.snack) / days)
+        };
+        
+        // Update Static Labels
+        if (document.getElementById('simBreakfastBaseline')) document.getElementById('simBreakfastBaseline').textContent = `Your avg: ${window.simBaseline.breakfast} cal`;
+        if (document.getElementById('simLunchBaseline')) document.getElementById('simLunchBaseline').textContent = `Your avg: ${window.simBaseline.lunch} cal`;
+        if (document.getElementById('simDinnerBaseline')) document.getElementById('simDinnerBaseline').textContent = `Your avg: ${window.simBaseline.dinner} cal`;
+        if (document.getElementById('simSnackBaseline')) document.getElementById('simSnackBaseline').textContent = `Your avg: ${window.simBaseline.snack} cal`;
+        
+        return window.simBaseline;
+    } catch (e) {
+        console.error("Baseline fetch failed", e);
+        return null;
+    }
+}
 
 async function updateFutureProjection() {
     if (!currentUser) return;
+    
+    const baseline = await initSimulatorBaseline();
+    if (!baseline) return;
 
     const projectionDays = parseInt(document.getElementById('simPeriod')?.value || '90');
     
-    // UI Label Updates
     const breakfastMod = parseInt(document.getElementById('simBreakfast')?.value || '0');
     const lunchMod = parseInt(document.getElementById('simLunch')?.value || '0');
     const dinnerMod = parseInt(document.getElementById('simDinner')?.value || '0');
     const snackMod = parseInt(document.getElementById('simSnack')?.value || '0');
     
-    if (document.getElementById('simBreakfastLabel')) document.getElementById('simBreakfastLabel').textContent = (breakfastMod >= 0 ? '+' : '') + breakfastMod + ' cal';
-    if (document.getElementById('simLunchLabel')) document.getElementById('simLunchLabel').textContent = (lunchMod >= 0 ? '+' : '') + lunchMod + ' cal';
-    if (document.getElementById('simDinnerLabel')) document.getElementById('simDinnerLabel').textContent = (dinnerMod >= 0 ? '+' : '') + dinnerMod + ' cal';
-    if (document.getElementById('simSnackLabel')) document.getElementById('simSnackLabel').textContent = (snackMod >= 0 ? '+' : '') + snackMod + ' cal';
+    // Update live slider labels
+    const updateLabel = (id, base, mod) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const newVal = Math.max(0, base + mod);
+        el.textContent = `New: ${newVal} cal → ${(mod >= 0 ? '+' : '')}${mod}/day`;
+    };
 
-    // We need a baseline if we don't have one
-    if (!lastSimBaseline) {
-        let endD = new Date();
-        let startD = new Date();
-        startD.setDate(endD.getDate() - 14);
-        
-        const startStr = formatDate(startD);
-        const endStr = formatDate(endD);
-        
-        try {
-            const res = await authFetch(`${API}/api/user/logs-range?start=${startStr}&end=${endStr}`);
-            const data = await res.json();
-            const logs = data.logs || [];
-            
-            const uniqueDates = new Set(logs.map(l => l.date.split('T')[0]));
-            const daysWithLogs = Math.max(1, uniqueDates.size);
-            
-            const breakdown = logs.reduce((acc, l) => {
-                let mt = (l.meal_type || 'snack').toLowerCase();
-                if (mt === 'brunch') mt = 'lunch';
-                if (acc[mt] !== undefined) acc[mt] += (l.calories || 0);
-                else acc.snack += (l.calories || 0);
-                return acc;
-            }, { breakfast: 0, lunch: 0, dinner: 0, snack: 0 });
-            
-            lastSimBaseline = {
-                breakfast: Math.max(0, breakdown.breakfast / daysWithLogs),
-                lunch: Math.max(0, breakdown.lunch / daysWithLogs),
-                dinner: Math.max(0, breakdown.dinner / daysWithLogs),
-                snack: Math.max(0, breakdown.snack / daysWithLogs)
-            };
-        } catch (e) {
-            console.error("Baseline fetch failed", e);
-            return;
-        }
-    }
+    updateLabel('simBreakfastLabel', baseline.breakfast, breakfastMod);
+    updateLabel('simLunchLabel', baseline.lunch, lunchMod);
+    updateLabel('simDinnerLabel', baseline.dinner, dinnerMod);
+    updateLabel('simSnackLabel', baseline.snack, snackMod);
 
-    const baseline = lastSimBaseline;
-    const currentDailyAvg = baseline.breakfast + baseline.lunch + baseline.dinner + baseline.snack;
-    
-    // Calculate Percent Changes
-    const calcPct = (mod, base) => base > 0 ? Math.round((mod / base) * 100) : (mod > 0 ? 100 : 0);
-    
-    if (document.getElementById('simBreakfastPct')) document.getElementById('simBreakfastPct').textContent = `${calcPct(breakfastMod, baseline.breakfast)}% change`;
-    if (document.getElementById('simLunchPct')) document.getElementById('simLunchPct').textContent = `${calcPct(lunchMod, baseline.lunch)}% change`;
-    if (document.getElementById('simDinnerPct')) document.getElementById('simDinnerPct').textContent = `${calcPct(dinnerMod, baseline.dinner)}% change`;
-    if (document.getElementById('simSnackPct')) document.getElementById('simSnackPct').textContent = `${calcPct(snackMod, baseline.snack)}% change`;
+    const simDailyAvg = Math.max(0, baseline.breakfast + breakfastMod) + 
+                        Math.max(0, baseline.lunch + lunchMod) + 
+                        Math.max(0, baseline.dinner + dinnerMod) + 
+                        Math.max(0, baseline.snack + snackMod);
 
-    // Calculate simulated daily average
-    const simBreakfast = Math.max(0, baseline.breakfast + breakfastMod);
-    const simLunch = Math.max(0, baseline.lunch + lunchMod);
-    const simDinner = Math.max(0, baseline.dinner + dinnerMod);
-    const simSnack = Math.max(0, baseline.snack + snackMod);
-    const simDailyAvg = simBreakfast + simLunch + simDinner + simSnack;
-    
     if (document.getElementById('simNewAvg')) document.getElementById('simNewAvg').textContent = Math.round(simDailyAvg) + ' cals';
 
-    // TDEE estimate
-    let tdee = currentUser.calorie_goal || 2000;
-    if (currentUser.weight && currentUser.height) {
-        const wKg = currentUser.weight * 0.453592;
-        const hCm = currentUser.height * 2.54;
-        const age = 20; 
-        const bmr = (10 * wKg) + (6.25 * hCm) - (5 * age) + 5;
-        tdee = Math.round(bmr * 1.4);
+    // Math: Weight delta = (simDailyAvg - baselineAvg) * days / 3500
+    const weightDelta = (simDailyAvg - baseline.total) * projectionDays / 3500;
+    
+    // Hero Number Update
+    const heroEl = document.getElementById('simConsequenceNumber');
+    if (heroEl) {
+        const mainNum = heroEl.querySelector('.main-number');
+        const sub = heroEl.querySelector('.sub-text');
+        
+        const targetDate = new Date();
+        targetDate.setDate(targetDate.getDate() + projectionDays);
+        const monthName = targetDate.toLocaleString('default', { month: 'long' });
+
+        const formattedDelta = (weightDelta >= 0 ? '+' : '−') + Math.abs(weightDelta).toFixed(1);
+        mainNum.textContent = `${formattedDelta} lbs by ${monthName}`;
+        
+        if (weightDelta > 0.1) mainNum.style.color = 'var(--red)';
+        else if (weightDelta < -0.1) mainNum.style.color = 'var(--green)';
+        else mainNum.style.color = 'var(--text-3)';
+
+        // Subtext logic
+        if (Math.abs(weightDelta) < 0.1) {
+            sub.textContent = "Maintain current habits → no weight change.";
+        } else if (weightDelta < 0) {
+            const savePerWeek = Math.abs(simDailyAvg - baseline.total) * 7;
+            if (savePerWeek > 2500) sub.textContent = `Cut ${Math.round(savePerWeek/700)} big meals/week → save ${Math.abs(weightDelta).toFixed(1)} lbs by ${monthName}`;
+            else sub.textContent = `Small daily discipline → save ${Math.abs(weightDelta).toFixed(1)} lbs by ${monthName}`;
+        } else {
+            sub.textContent = `Extra ${Math.round(simDailyAvg - baseline.total)} cal daily → adding up by ${monthName}.`;
+        }
+
+        // Animation
+        if ((lastWeightDelta <= 0 && weightDelta > 0) || (lastWeightDelta >= 0 && weightDelta < 0)) {
+            const flashClass = weightDelta > 0 ? 'flash-red' : 'flash-green';
+            heroEl.classList.remove('flash-red', 'flash-green');
+            void heroEl.offsetWidth; // trigger reflow
+            heroEl.classList.add(flashClass);
+        }
+        lastWeightDelta = weightDelta;
     }
 
-    // Projections
+    // Update the chart for visual context
     const startWeight = parseFloat(currentUser.weight) || 150;
-    const baselineLabels = [];
+    const labels = [];
     const baselinePoints = [];
     const simPoints = [];
     
     for (let i = 0; i <= projectionDays; i += Math.max(1, Math.floor(projectionDays/10))) {
-        baselineLabels.push('Day ' + i);
-        const bSurplus = currentDailyAvg - tdee;
-        const bWeightChange = (bSurplus * i) / 3500;
-        baselinePoints.push(startWeight + bWeightChange);
-        
-        const sSurplus = simDailyAvg - tdee;
-        const sWeightChange = (sSurplus * i) / 3500;
-        simPoints.push(startWeight + sWeightChange);
-    }
-    
-    const finalWeight = simPoints[simPoints.length-1];
-    const weightResultEl = document.getElementById('simDelta');
-    if (weightResultEl) {
-        weightResultEl.textContent = finalWeight.toFixed(1) + ' lbs';
-        const weightDelta = finalWeight - startWeight;
-        weightResultEl.style.color = weightDelta > 0 ? 'var(--red)' : 'var(--green)';
+        labels.push('Day ' + i);
+        baselinePoints.push(startWeight);
+        simPoints.push(startWeight + ((simDailyAvg - baseline.total) * i / 3500));
     }
 
     const canvas = document.getElementById('futureChart');
@@ -2139,7 +2257,7 @@ async function updateFutureProjection() {
     futureChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: baselineLabels,
+            labels: labels,
             datasets: [
                 {
                    label: 'Current Habits', data: baselinePoints, borderColor: '#94a3b8', borderDash: [5, 5], fill: false, tension: 0.3, pointRadius: 0
@@ -2170,6 +2288,28 @@ async function updateFutureProjection() {
     });
 }
 
+window.getSimulatorState = function() {
+    if (!window.simBaseline) return null;
+    const projectionDays = parseInt(document.getElementById('simPeriod')?.value || '90');
+    const breakfastMod = parseInt(document.getElementById('simBreakfast')?.value || '0');
+    const lunchMod = parseInt(document.getElementById('simLunch')?.value || '0');
+    const dinnerMod = parseInt(document.getElementById('simDinner')?.value || '0');
+    const snackMod = parseInt(document.getElementById('simSnack')?.value || '0');
+    
+    const simDailyAvg = Math.max(0, window.simBaseline.breakfast + breakfastMod) + 
+                        Math.max(0, window.simBaseline.lunch + lunchMod) + 
+                        Math.max(0, window.simBaseline.dinner + dinnerMod) + 
+                        Math.max(0, window.simBaseline.snack + snackMod);
+
+    return {
+        baseline: window.simBaseline,
+        mods: { breakfastMod, lunchMod, dinnerMod, snackMod },
+        projectionDays,
+        simDailyAvg,
+        weightDelta: (simDailyAvg - window.simBaseline.total) * projectionDays / 3500
+    };
+};
+
 function resetSimulator() {
     ['simBreakfast', 'simLunch', 'simDinner', 'simSnack'].forEach(id => {
         const el = document.getElementById(id);
@@ -2186,6 +2326,90 @@ function clearMealSelection() {
 }
 
 // ── LEADERBOARD ─────────────────────────────
+async function fetchTopLeaderboard() {
+    const topEl = document.getElementById('topLeaderboardContent');
+    if (!topEl) return;
+    
+    try {
+        topEl.innerHTML = '<div class="spinner"></div><p style="text-align:center; font-weight:bold;">Loading campus favorites...</p>';
+        const res = await authFetch(`${API}/api/leaderboard/top`);
+        const items = await res.json();
+        
+        let headerHtml = `<h3 style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; font-weight: 800; text-transform: uppercase;">🏆 This Week's Campus Favorites</h3>`;
+
+        if (!items || items.length === 0 || items.every(i => i.total_servings === 0)) {
+            topEl.innerHTML = headerHtml + `<div class="empty-state">📊 No campus data yet — be the first to log a meal!</div>`;
+            return;
+        }
+
+        let html = headerHtml;
+        let top3 = items.slice(0, 3);
+        let rest = items.slice(3, 10);
+
+        if (top3.length > 0) {
+            html += `<div class="podium-container" style="display: flex; justify-content: center; align-items: stretch; gap: 8px; margin-bottom: 30px; margin-top: 20px; border-bottom: 2px solid #000; padding-bottom: 15px;">`;
+            
+            const podiumOrder = [];
+            if (top3.length === 1) {
+                podiumOrder.push({ item: top3[0], rank: 1, height: '160px', bg: '#FFD700', color: '#000' });
+            } else if (top3.length === 2) {
+                podiumOrder.push({ item: top3[1], rank: 2, height: '120px', bg: '#C0C0C0', color: '#000' });
+                podiumOrder.push({ item: top3[0], rank: 1, height: '160px', bg: '#FFD700', color: '#000' });
+            } else {
+                podiumOrder.push({ item: top3[1], rank: 2, height: '120px', bg: '#C0C0C0', color: '#000' });
+                podiumOrder.push({ item: top3[0], rank: 1, height: '160px', bg: '#FFD700', color: '#000' });
+                podiumOrder.push({ item: top3[2], rank: 3, height: '80px', bg: '#CD7F32', color: '#000' });
+            }
+
+            podiumOrder.forEach(p => {
+                html += `
+                <div style="display: flex; flex-direction: column; width: 120px;">
+                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: flex-end; flex: 1;">
+                        <div style="width: 100%; height: ${p.height}; background: ${p.bg}; color: ${p.color}; border: 2px solid #000; display: flex; justify-content: center; align-items: flex-start; padding-top: 10px; position: relative;">
+                            ${p.rank === 1 ? '<div style="position: absolute; top: -25px; left: 50%; transform: translateX(-50%); font-size: 1.5rem;">👑</div>' : ''}
+                            <span style="font-size: 1.5rem; font-weight: 800;">${p.rank}</span>
+                        </div>
+                    </div>
+                    <div style="margin-top: 10px; text-align: center;">
+                        <div style="font-size: 0.85rem; font-weight: 800; text-transform: uppercase; line-height: 1.2;">${p.item.item_name}</div>
+                        <div style="font-size: 0.75rem; font-weight: bold; color: var(--primary); margin-top: 4px;">${Number(p.item.total_servings).toLocaleString(undefined, { maximumFractionDigits: 1 })} SERVINGS</div>
+                        <div style="font-size: 0.65rem; color: var(--text-3); margin-top: 2px;">${p.item.unique_users} Users</div>
+                    </div>
+                </div>
+                `;
+            });
+            html += `</div>`;
+        }
+
+        if (rest.length > 0) {
+            html += `<div class="leaderboard-list">`;
+            rest.forEach((p, idx) => {
+                const rank = idx + 4;
+                html += `
+                    <div class="leaderboard-row" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; border-bottom: 1px dashed #000;">
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <div style="font-weight: 900; font-size: 1.2rem; min-width: 25px;">#${rank}</div>
+                            <div style="font-weight: 700; font-size: 1rem; text-transform: uppercase;">${p.item_name}</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-weight: 800; font-size: 1.1rem;">
+                                ${Number(p.total_servings).toLocaleString(undefined, { maximumFractionDigits: 1 })} <span style="font-size: 0.7rem; font-weight: normal; font-style: italic;">SERVINGS</span>
+                            </div>
+                            <div style="font-size: 0.7rem; color: var(--text-3);">${p.unique_users} Users</div>
+                        </div>
+                    </div>
+                `;
+            });
+            html += `</div>`;
+        }
+        
+        topEl.innerHTML = html;
+    } catch (e) {
+        console.error('Top Leaderboard error', e);
+        topEl.innerHTML = '<div class="empty-state text-red">Failed to load top campus favorites.</div>';
+    }
+}
+
 let leaderboardDebounce = null;
 async function fetchLeaderboard(query = null) {
     const inputEl = document.getElementById('leaderboardSearchInput');

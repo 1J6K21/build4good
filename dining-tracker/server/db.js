@@ -404,6 +404,16 @@ function getLeaderboard(itemName) {
   `).all(`%${itemName.toLowerCase()}%`);
 }
 
+function getTopItems(limit = 10) {
+  return db.prepare(`
+    SELECT item_name, SUM(serving_size) as total_servings, COUNT(DISTINCT user_id) as unique_users
+    FROM meal_logs
+    GROUP BY item_name
+    ORDER BY total_servings DESC
+    LIMIT ?
+  `).all(limit);
+}
+
 // ── DINING TWIN ───────────────────────────────────
 function findDiningTwin(userId, days = 30) {
   const cutoff = new Date();
@@ -628,6 +638,7 @@ module.exports = {
   getWaitTimeStatsAll,
   clearStaleJobs,
   getLeaderboard,
+  getTopItems,
   findDiningTwin,
   getExperiments,
   createExperiment,

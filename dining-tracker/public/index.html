@@ -155,6 +155,10 @@
             </aside>
 
             <div class="container">
+                <div id="dangerWindowBanner" style="display:none; background: #dc2626; color: white; padding: 14px 40px; font-weight: 800; border-radius: 0; position: relative; margin: 0 -40px 20px -40px;">
+                    <span id="dangerWindowMessage"></span>
+                    <button onclick="dismissDangerBanner()" style="background: none; border: none; color: white; font-size: 20px; cursor: pointer; position: absolute; right: 20px; top: 50%; transform: translateY(-50%);">×</button>
+                </div>
 
             <!-- Today's meals at the TOP -->
             <div class="card meals-card full-width-card" id="todayMealsCard">
@@ -453,41 +457,47 @@
                     </div>
 
                     <div class="simulator-body">
-                        <div class="simulator-chart-col">
-                            <canvas id="futureChart"></canvas>
+                        <div class="simulator-chart-col" style="display: flex; flex-direction: column;">
+                            <div id="simConsequenceNumber">
+                                <span class="main-number">-- lbs by --</span>
+                                <span class="sub-text">Small change, big impact.</span>
+                            </div>
+                            <div style="flex: 1; position: relative; min-height: 0;">
+                                <canvas id="futureChart"></canvas>
+                            </div>
                         </div>
                         <div class="simulator-sidebar">
                             <div class="sim-group">
                                 <label>Breakfast Shift</label>
+                                <div class="sim-baseline-info" id="simBreakfastBaseline">Your avg: -- cal</div>
                                 <div class="sim-slider-row">
                                     <input type="range" id="simBreakfast" min="-500" max="500" value="0" step="10" oninput="updateFutureProjection()">
-                                    <span id="simBreakfastLabel">0 cal</span>
                                 </div>
-                                <div class="sim-pct-caption" id="simBreakfastPct">0% change</div>
+                                <div class="sim-new-info" id="simBreakfastLabel">New: -- cal → --/day</div>
                             </div>
                             <div class="sim-group">
                                 <label>Lunch Shift</label>
+                                <div class="sim-baseline-info" id="simLunchBaseline">Your avg: -- cal</div>
                                 <div class="sim-slider-row">
                                     <input type="range" id="simLunch" min="-500" max="500" value="0" step="10" oninput="updateFutureProjection()">
-                                    <span id="simLunchLabel">0 cal</span>
                                 </div>
-                                <div class="sim-pct-caption" id="simLunchPct">0% change</div>
+                                <div class="sim-new-info" id="simLunchLabel">New: -- cal → --/day</div>
                             </div>
                             <div class="sim-group">
                                 <label>Dinner Shift</label>
+                                <div class="sim-baseline-info" id="simDinnerBaseline">Your avg: -- cal</div>
                                 <div class="sim-slider-row">
                                     <input type="range" id="simDinner" min="-500" max="500" value="0" step="10" oninput="updateFutureProjection()">
-                                    <span id="simDinnerLabel">0 cal</span>
                                 </div>
-                                <div class="sim-pct-caption" id="simDinnerPct">0% change</div>
+                                <div class="sim-new-info" id="simDinnerLabel">New: -- cal → --/day</div>
                             </div>
                             <div class="sim-group">
                                 <label>Snacking Shift</label>
+                                <div class="sim-baseline-info" id="simSnackBaseline">Your avg: -- cal</div>
                                 <div class="sim-slider-row">
                                     <input type="range" id="simSnack" min="-500" max="500" value="0" step="10" oninput="updateFutureProjection()">
-                                    <span id="simSnackLabel">0 cal</span>
                                 </div>
-                                <div class="sim-pct-caption" id="simSnackPct">0% change</div>
+                                <div class="sim-new-info" id="simSnackLabel">New: -- cal → --/day</div>
                             </div>
                             <div class="sim-summary">
                                 <div class="sim-summary-item">
@@ -902,10 +912,16 @@
                 <div class="card-header" style="flex-direction: column; align-items: flex-start;">
                     <h2>Food Leaderboards</h2>
                     <span class="card-hint">Who has had the most? Rank by total servings!</span>
-                    
-                    <div style="width: 100%; margin-top: 15px; display: flex; flex-direction: row; align-items: stretch; gap: 10px;">
-                        <input type="text" id="leaderboardSearchInput" class="form-input" style="flex: 1;" placeholder="Search a food item (e.g. pizza, chicken, salad)..." value="pizza"/>
-                        <button class="btn btn-primary" onclick="searchLeaderboard()"><i class="fa-solid fa-search"></i></button>
+                </div>
+                
+                <div class="card-body" id="topLeaderboardContent" style="padding-bottom: 0;"></div>
+                
+                <div class="card-header" style="flex-direction: column; align-items: flex-start; border-top: 2px solid var(--border); background-color: rgba(0,0,0,0.02); padding: 25px; margin-top: 20px;">
+                    <h3 style="margin: 0 0 8px 0; font-size: 1.1rem; font-weight: 800; text-transform: uppercase;">🔍 Specific Food Search</h3>
+                    <p class="card-hint" style="margin-bottom: 15px;">Curious about a specific item? Search to see who eats it the most!</p>
+                    <div style="width: 100%; display: flex; flex-direction: row; align-items: stretch; gap: 12px;">
+                        <input type="text" id="leaderboardSearchInput" class="form-input" style="flex: 1; padding: 16px 20px; font-size: 1.1rem; font-weight: 600; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); border: 2px solid var(--border);" placeholder="Search a specific food (e.g. pizza, salad, chicken)..."/>
+                        <button class="btn btn-primary" onclick="searchLeaderboard()" style="padding: 0 25px; font-size: 1.2rem;"><i class="fa-solid fa-arrow-right"></i></button>
                     </div>
                 </div>
                 <div class="card-body" id="leaderboardContent">
