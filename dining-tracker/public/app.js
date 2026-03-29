@@ -938,6 +938,7 @@ function renderMenu(stations, locName, period, date, waitStats = []) {
                             <span class="item-macro">F <strong>${item.fat || 0}g</strong></span>
                             <span class="item-macro">C <strong>${item.carbs || 0}g</strong></span>
                         </div>
+                        ${getItemFlags(item)}
                         <div class="item-serving-controls" onclick="event.stopPropagation()">
                             <div class="stepper">
                                 <button class="step-btn" onclick="changeServings('${item.name.replace(/'/g, "\\'")}', -1)">−</button>
@@ -955,6 +956,40 @@ function renderMenu(stations, locName, period, date, waitStats = []) {
             </div>
         </div>
     `}).join('');
+}
+function getItemFlags(item) {
+    const flags = [];
+    const cal = item.calories || 0;
+    const pro = item.protein || 0;
+    const fat = item.fat || 0;
+    const fib = item.fiber || 0;
+    const sodium = item.sodium || 0;
+    const sugar = item.sugars || 0;
+
+    // Red: only flag genuinely poor nutritional trade-offs
+    // High cal with low protein AND low fiber = empty calories
+    const isHighProtein = pro >= 15;
+    if (
+        cal >= 500 ||                                         // Just huge
+        (cal >= 350 && !isHighProtein && fib < 2) ||          // Big & nutritionally empty
+        (sodium >= 900 && !isHighProtein) ||                  // Super salty without protein payoff
+        (fat >= 18 && sugar >= 12)                            // Dessert-style fat+sugar bomb
+    ) {
+        flags.push('<span class="flag-badge flag-red"><i class="fa-solid fa-triangle-exclamation"></i> Heavy Gainer — Recommended: &lt;2x/week</span>');
+    }
+
+    // Green: calorie-notable but nutritionally sparse (skip-worthy)
+    if (cal >= 150 && pro < 8 && fib < 2 && fat >= 5) {
+        flags.push('<span class="flag-badge flag-green"><i class="fa-solid fa-forward-step"></i> Easy to skip — Low nutrient density</span>');
+    }
+
+    // Purple: great source of a nutrient the user may be skimping on
+    if (pro >= 20 || fib >= 4) {
+        const nutrient = pro >= 20 ? 'protein' : 'fiber';
+        flags.push(`<span class="flag-badge flag-purple"><i class="fa-solid fa-wand-magic-sparkles"></i> Rich in ${nutrient} — don't miss this one</span>`);
+    }
+
+    return flags.length ? `<div class="item-flags">${flags.join('')}</div>` : '';
 }
 
 function toggleItem(el, item) {
@@ -1025,6 +1060,9 @@ function updateLogBar() {
         return acc;
     }, { cal: 0, p: 0, f: 0, c: 0 });
 
+    const calGoal = (currentUser && currentUser.calorie_goal) ? currentUser.calorie_goal : 2000;
+    const pct = Math.round((totals.cal / calGoal) * 100);
+
     document.getElementById('logCount').textContent = `${selectedItems.length} items`;
     document.getElementById('logCalBadge').innerHTML = `
         <span class="macro-val"><strong>${Math.round(totals.cal)}</strong> cal</span>
@@ -1033,6 +1071,11 @@ function updateLogBar() {
         <span class="macro-val"><strong>${Math.round(totals.f)}</strong>g fat</span>
         <span class="macro-val"><strong>${Math.round(totals.c)}</strong>g carbs</span>
     `;
+    const pctEl = document.getElementById('logGoalPct');
+    if (pctEl) {
+        pctEl.textContent = `${pct}% of goal`;
+        pctEl.style.color = pct > 60 ? '#ef4444' : pct > 35 ? '#f59e0b' : '#10b981';
+    }
 }
 
 function openLogModal() {

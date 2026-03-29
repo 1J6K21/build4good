@@ -1293,6 +1293,43 @@ body {
   box-shadow: 0 0 10px rgba(80, 0, 0, 0.3);
 }
 
+.item-flags {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.flag-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  line-height: 1.2;
+}
+
+.flag-red {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.flag-green {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.flag-purple {
+  background: rgba(168, 85, 247, 0.1);
+  color: #a855f7;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
 .item-serving-controls {
   display: flex;
   align-items: center;
@@ -1504,18 +1541,20 @@ body {
 
 .log-bar-inner {
   background: rgba(26, 26, 26, 0.75);
-  /* Dark translucent background */
   backdrop-filter: blur(24px) saturate(160%);
   -webkit-backdrop-filter: blur(24px) saturate(160%);
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: white;
   border-radius: 24px;
-  padding: 12px 28px;
+  padding: 10px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
   margin-bottom: 8px;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .macro-val {
@@ -1537,29 +1576,45 @@ body {
 .log-bar-info {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 10px;
   flex-wrap: nowrap;
   overflow: hidden;
+  min-width: 0;
+  flex: 1;
 }
 
 .log-bar-info span {
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   font-weight: 500;
   opacity: 0.9;
+  white-space: nowrap;
 }
 
 .log-cal-badge {
   background: rgba(255, 255, 255, 0.15);
   color: white;
-  font-size: 0.9rem;
+  font-size: 0.78rem;
   font-weight: 800;
-  padding: 4px 12px;
+  padding: 3px 10px;
   border-radius: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .log-bar-actions {
   display: flex;
   gap: 10px;
+}
+
+.log-goal-pct {
+  font-size: 1rem;
+  font-weight: 800;
+  text-align: center;
+  flex-shrink: 0;
+  width: 120px;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
 }
 
 /* ═══════════════════════════════════════════
