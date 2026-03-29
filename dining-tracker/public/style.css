@@ -4007,3 +4007,123 @@ body {
   color: white;
   box-shadow: var(--shadow-sm);
 }
+
+/* ═══════════════════════════════════════════
+   Habit Simulator
+═══════════════════════════════════════════ */
+.simulator-card {
+  overflow: hidden;
+}
+
+.simulator-body {
+  display: flex;
+  gap: 32px;
+  min-height: 350px;
+}
+
+.simulator-chart-col {
+  flex: 1;
+  position: relative;
+  min-height: 300px;
+}
+
+.simulator-sidebar {
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px;
+  background: var(--surface2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.sim-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sim-group label {
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--text-2);
+  letter-spacing: 0.05em;
+}
+
+.sim-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sim-slider-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--primary);
+}
+
+.sim-slider-row span {
+  font-size: 0.85rem;
+  font-weight: 700;
+  min-width: 60px;
+  text-align: right;
+}
+
+.sim-summary {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 20px;
+  border-top: 1px dashed var(--border);
+}
+
+.sim-summary-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sim-label {
+  font-size: 0.75rem;
+  color: var(--text-3);
+  font-weight: 600;
+}
+
+.sim-val {
+  font-weight: 800;
+  font-size: 1rem;
+  color: var(--primary);
+}
+
+#simDelta {
+  color: var(--green);
+}
+
+@media (max-width: 1000px) {
+  .simulator-body {
+    flex-direction: column;
+  }
+  .simulator-sidebar {
+    width: 100%;
+  }
+}
+
+.sim-pct-caption {
+  font-size: 0.65rem;
+  color: var(--text-3);
+  font-weight: 600;
+  margin-top: -4px;
+  padding-left: 2px;
+}
+
+.tradeoff-card {
+  transition: none; /* Avoid flickering during real-time updates */
+}
+
+.tradeoff-today-section .bucket-track {
+  height: 40px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+}

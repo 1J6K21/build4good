@@ -333,10 +333,13 @@ function upsertFoodItem(item) {
 }
 
 function addMealLog(userId, date, mealType, itemName, calories, servingSize, p = 0, f = 0, c = 0, na = 0, fib = 0, sug = 0, sat = 0, trans = 0, chol = 0) {
+  let ss = parseFloat(servingSize);
+  if (isNaN(ss) || ss <= 0) ss = 1.0;
+  
   db.prepare(`
     INSERT INTO meal_logs (user_id, date, meal_type, item_name, calories, serving_size, protein, fat, carbs, sodium, fiber, sugar, sugars, saturated_fat, trans_fat, cholesterol, logged_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(userId, date, mealType, itemName, calories, servingSize, p, f, c, na, fib, sug, sug, sat, trans, chol, Date.now());
+  `).run(userId, date, mealType, itemName, calories, ss, p, f, c, na, fib, sug, sug, sat, trans, chol, Date.now());
 }
 
 function getMealLogs(userId, date) {
@@ -391,7 +394,7 @@ function getWaitTimeStatsAll(locationSlug) {
 // ── LEADERBOARD ──────────────────────────────────
 function getLeaderboard(itemName) {
   return db.prepare(`
-    SELECT users.name, users.picture, COUNT(*) as count
+    SELECT users.name, users.picture, SUM(CAST(serving_size AS REAL)) as count
     FROM meal_logs
     JOIN users ON meal_logs.user_id = users.id
     WHERE LOWER(meal_logs.item_name) LIKE ?

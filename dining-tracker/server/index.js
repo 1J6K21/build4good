@@ -136,6 +136,9 @@ app.get('/api/user/logs', authenticateToken, async (req, res) => {
 
 app.post('/api/user/logs', authenticateToken, async (req, res) => {
     const { date, mealType, item } = req.body;
+    try {
+        fs.appendFileSync('/tmp/app_debug.log', `[LOG] User logged: ${item.name} | Servings: ${item.portion} | Cals: ${item.calories}\n`);
+    } catch(e) {}
     await addMealLog(
         req.user.id, date, mealType, item.name, item.calories, item.portion,
         item.protein, item.fat, item.carbs, item.sodium,
@@ -184,6 +187,9 @@ app.get('/api/leaderboard', async (req, res) => {
     const { item } = req.query;
     if (!item) return res.json({ leaderboard: [] });
     const leaderboard = getLeaderboard(item);
+    try {
+        fs.appendFileSync('/tmp/app_debug.log', `[DEBUG_LEADERBOARD] Query: ${item}\nData: ${JSON.stringify(leaderboard)}\n`);
+    } catch(e) {}
     res.json({ leaderboard });
 });
 

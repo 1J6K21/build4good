@@ -12,6 +12,7 @@ let ringChart = null;
 let weekChart = null;
 let selectedLoggedMeals = [];
 let lastFetchedLogs = [];
+let futureChartInstance = null;
 let servingIncrement = 0.5;
 let trackingDate = null; // Will be initialized by todayStr() later
 
@@ -287,6 +288,7 @@ async function refreshDashboard() {
     try { renderTradeoffTimeline(logs, calGoal); } catch (e) { console.error(e); }
     // Weekly Overview call removed
     try { updateWeightProjection(); } catch (e) { console.error(e); }
+    try { updateFutureProjection(); } catch (e) { console.error(e); }
     try { updateInsights(); } catch (e) { console.error(e); }
 }
 
@@ -508,7 +510,7 @@ function renderTodayMeals(meals) {
           </div>
           <div class="meal-entry-left">
             <div class="meal-entry-name">${(m.meal_type || 'meal').charAt(0).toUpperCase() + (m.meal_type || 'meal').slice(1)}</div>
-            <div class="meal-entry-meta">${m.item_name}</div>
+            <div class="meal-entry-meta">${m.item_name}${m.serving_size && m.serving_size !== 1 ? ` (${m.serving_size} serving${m.serving_size !== 1 ? 's' : ''})` : ''}</div>
             <div class="meal-entry-macros">
               ${m.protein || 0}g P · ${m.fat || 0}g F · ${m.carbs || 0}g C
             </div>
@@ -1163,7 +1165,7 @@ async function confirmLog() {
     // Multiply by servings before sending to legacy API or update API to handle servings
     const itemsToLog = selectedItems.map(i => ({
         ...i,
-        name: i.servings !== 1 ? `${i.name} (${i.servings} servings)` : i.name,
+        portion: i.servings,
         calories: Math.round((i.calories || 0) * i.servings),
         protein: Math.round((i.protein || 0) * i.servings),
         fat: Math.round((i.fat || 0) * i.servings),
@@ -1857,6 +1859,163 @@ async function updateWeightProjection() {
     }
 }
 
+let lastSimBaseline = null;
+
+async function updateFutureProjection() {
+    if (!currentUser) return;
+
+    const projectionDays = parseInt(document.getElementById('simPeriod')?.value || '90');
+    
+    // UI Label Updates
+    const breakfastMod = parseInt(document.getElementById('simBreakfast')?.value || '0');
+    const lunchMod = parseInt(document.getElementById('simLunch')?.value || '0');
+    const dinnerMod = parseInt(document.getElementById('simDinner')?.value || '0');
+    const snackMod = parseInt(document.getElementById('simSnack')?.value || '0');
+    
+    if (document.getElementById('simBreakfastLabel')) document.getElementById('simBreakfastLabel').textContent = (breakfastMod >= 0 ? '+' : '') + breakfastMod + ' cal';
+    if (document.getElementById('simLunchLabel')) document.getElementById('simLunchLabel').textContent = (lunchMod >= 0 ? '+' : '') + lunchMod + ' cal';
+    if (document.getElementById('simDinnerLabel')) document.getElementById('simDinnerLabel').textContent = (dinnerMod >= 0 ? '+' : '') + dinnerMod + ' cal';
+    if (document.getElementById('simSnackLabel')) document.getElementById('simSnackLabel').textContent = (snackMod >= 0 ? '+' : '') + snackMod + ' cal';
+
+    // We need a baseline if we don't have one
+    if (!lastSimBaseline) {
+        let endD = new Date();
+        let startD = new Date();
+        startD.setDate(endD.getDate() - 14);
+        
+        const startStr = formatDate(startD);
+        const endStr = formatDate(endD);
+        
+        try {
+            const res = await authFetch(`${API}/api/user/logs-range?start=${startStr}&end=${endStr}`);
+            const data = await res.json();
+            const logs = data.logs || [];
+            
+            const uniqueDates = new Set(logs.map(l => l.date.split('T')[0]));
+            const daysWithLogs = Math.max(1, uniqueDates.size);
+            
+            const breakdown = logs.reduce((acc, l) => {
+                let mt = (l.meal_type || 'snack').toLowerCase();
+                if (mt === 'brunch') mt = 'lunch';
+                if (acc[mt] !== undefined) acc[mt] += (l.calories || 0);
+                else acc.snack += (l.calories || 0);
+                return acc;
+            }, { breakfast: 0, lunch: 0, dinner: 0, snack: 0 });
+            
+            lastSimBaseline = {
+                breakfast: Math.max(0, breakdown.breakfast / daysWithLogs),
+                lunch: Math.max(0, breakdown.lunch / daysWithLogs),
+                dinner: Math.max(0, breakdown.dinner / daysWithLogs),
+                snack: Math.max(0, breakdown.snack / daysWithLogs)
+            };
+        } catch (e) {
+            console.error("Baseline fetch failed", e);
+            return;
+        }
+    }
+
+    const baseline = lastSimBaseline;
+    const currentDailyAvg = baseline.breakfast + baseline.lunch + baseline.dinner + baseline.snack;
+    
+    // Calculate Percent Changes
+    const calcPct = (mod, base) => base > 0 ? Math.round((mod / base) * 100) : (mod > 0 ? 100 : 0);
+    
+    if (document.getElementById('simBreakfastPct')) document.getElementById('simBreakfastPct').textContent = `${calcPct(breakfastMod, baseline.breakfast)}% change`;
+    if (document.getElementById('simLunchPct')) document.getElementById('simLunchPct').textContent = `${calcPct(lunchMod, baseline.lunch)}% change`;
+    if (document.getElementById('simDinnerPct')) document.getElementById('simDinnerPct').textContent = `${calcPct(dinnerMod, baseline.dinner)}% change`;
+    if (document.getElementById('simSnackPct')) document.getElementById('simSnackPct').textContent = `${calcPct(snackMod, baseline.snack)}% change`;
+
+    // Calculate simulated daily average
+    const simBreakfast = Math.max(0, baseline.breakfast + breakfastMod);
+    const simLunch = Math.max(0, baseline.lunch + lunchMod);
+    const simDinner = Math.max(0, baseline.dinner + dinnerMod);
+    const simSnack = Math.max(0, baseline.snack + snackMod);
+    const simDailyAvg = simBreakfast + simLunch + simDinner + simSnack;
+    
+    if (document.getElementById('simNewAvg')) document.getElementById('simNewAvg').textContent = Math.round(simDailyAvg) + ' cals';
+
+    // TDEE estimate
+    let tdee = currentUser.calorie_goal || 2000;
+    if (currentUser.weight && currentUser.height) {
+        const wKg = currentUser.weight * 0.453592;
+        const hCm = currentUser.height * 2.54;
+        const age = 20; 
+        const bmr = (10 * wKg) + (6.25 * hCm) - (5 * age) + 5;
+        tdee = Math.round(bmr * 1.4);
+    }
+
+    // Projections
+    const startWeight = parseFloat(currentUser.weight) || 150;
+    const baselineLabels = [];
+    const baselinePoints = [];
+    const simPoints = [];
+    
+    for (let i = 0; i <= projectionDays; i += Math.max(1, Math.floor(projectionDays/10))) {
+        baselineLabels.push('Day ' + i);
+        const bSurplus = currentDailyAvg - tdee;
+        const bWeightChange = (bSurplus * i) / 3500;
+        baselinePoints.push(startWeight + bWeightChange);
+        
+        const sSurplus = simDailyAvg - tdee;
+        const sWeightChange = (sSurplus * i) / 3500;
+        simPoints.push(startWeight + sWeightChange);
+    }
+    
+    const finalWeight = simPoints[simPoints.length-1];
+    const weightResultEl = document.getElementById('simDelta');
+    if (weightResultEl) {
+        weightResultEl.textContent = finalWeight.toFixed(1) + ' lbs';
+        const weightDelta = finalWeight - startWeight;
+        weightResultEl.style.color = weightDelta > 0 ? 'var(--red)' : 'var(--green)';
+    }
+
+    const canvas = document.getElementById('futureChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (futureChartInstance) futureChartInstance.destroy();
+    
+    futureChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: baselineLabels,
+            datasets: [
+                {
+                   label: 'Current Habits', data: baselinePoints, borderColor: '#94a3b8', borderDash: [5, 5], fill: false, tension: 0.3, pointRadius: 0
+                },
+                {
+                   label: 'Simulated Habits', data: simPoints, borderColor: '#500000', backgroundColor: 'rgba(80, 0, 0, 0.05)', fill: true, tension: 0.3, pointRadius: 0, borderWidth: 3
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+            scales: {
+                y: { title: { display: true, text: 'Weight (lbs)', font: { weight: 'bold' } }, grid: { color: 'rgba(0,0,0,0.05)' } },
+                x: { grid: { display: false } }
+            },
+            plugins: {
+                legend: { position: 'top', align: 'end', labels: { boxWidth: 12, font: { weight: 'bold', size: 11 } } },
+                tooltip: {
+                    callbacks: { label: (context) => {
+                           let label = context.dataset.label || '';
+                           if (label) label += ': ';
+                           if (context.parsed.y !== null) label += context.parsed.y.toFixed(1) + ' lbs';
+                           return label;
+                    }}
+                }
+            }
+        }
+    });
+}
+
+function resetSimulator() {
+    ['simBreakfast', 'simLunch', 'simDinner', 'simSnack'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = 0;
+    });
+    updateFutureProjection();
+}
+
 
 function clearMealSelection() {
     selectedLoggedMeals = [];
@@ -1924,7 +2083,7 @@ async function fetchLeaderboard(query = null) {
                     </div>
                     <div style="margin-top: 10px; text-align: center;">
                         <div style="font-size: 0.85rem; font-weight: 800; text-transform: uppercase; line-height: 1.2;">${item.user.name}</div>
-                        <div style="font-size: 0.75rem; font-weight: bold; color: var(--primary); margin-top: 4px;">${item.user.count} LOGS</div>
+                        <div style="font-size: 0.75rem; font-weight: bold; color: var(--primary); margin-top: 4px;">${Number(item.user.count).toLocaleString(undefined, { maximumFractionDigits: 1 })} SERVINGS</div>
                     </div>
                 </div>
                 `;
@@ -1944,7 +2103,7 @@ async function fetchLeaderboard(query = null) {
                             <div style="font-weight: 700; font-size: 1rem; text-transform: uppercase;">${user.name}</div>
                         </div>
                         <div style="font-weight: 800; font-size: 1.1rem;">
-                            ${user.count} <span style="font-size: 0.7rem; font-weight: normal; font-style: italic;">LOGS</span>
+                            ${Number(user.count).toLocaleString(undefined, { maximumFractionDigits: 1 })} <span style="font-size: 0.7rem; font-weight: normal; font-style: italic;">SERVINGS</span>
                         </div>
                     </div>
                 `;
