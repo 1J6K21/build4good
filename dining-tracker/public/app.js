@@ -941,20 +941,71 @@ async function updateTrendChart() {
         const ctx = canvas.getContext('2d');
         if (trendChartInstance) trendChartInstance.destroy();
 
+        const datasets = [{
+            label: metric.replace('_', ' ').toUpperCase(),
+            data: values,
+            borderColor: '#500000',
+            backgroundColor: 'rgba(80, 0, 0, 0.05)',
+            fill: true,
+            tension: 0.4,
+            pointRadius: durationDays > 30 ? 0 : (hasData ? 4 : 0),
+            borderWidth: 2,
+            z: 10
+        }];
+
+        // Add Scenario lines if metric is calories
+        if (metric === 'calories' && window.savedScenarios && window.savedScenarios.length > 0) {
+            // Need baseline to calculate scenario averages
+            const baseline = window.simBaseline || { breakfast: 0, lunch:0, dinner:0, snack:0 };
+            window.savedScenarios.forEach((p, idx) => {
+                const pSimAvg = Math.max(0, (baseline.breakfast || 0) + (p.breakfast_mod || 0)) + 
+                              Math.max(0, (baseline.lunch || 0) + (p.lunch_mod || 0)) + 
+                              Math.max(0, (baseline.dinner || 0) + (p.dinner_mod || 0)) + 
+                              Math.max(0, (baseline.snack || 0) + (p.snack_mod || 0));
+                
+                datasets.push({
+                    label: `Scenario: ${p.name}`,
+                    data: Array(labels.length).fill(pSimAvg),
+                    borderColor: `hsl(${(idx * 137.5) % 360}, 50%, 65%)`,
+                    borderDash: [5, 5],
+                    fill: false,
+                    tension: 0,
+                    pointRadius: 0,
+                    borderWidth: 1.5
+                });
+            });
+        }
+
+        // Add Current Goal line
+        const macroGoalMap = {
+            protein: currentUser.protein_goal,
+            fat: currentUser.fat_goal,
+            carbs: currentUser.carb_goal,
+            calories: currentUser.calorie_goal
+        };
+        const activeGoal = macroGoalMap[metric];
+        if (activeGoal) {
+            datasets.push({
+                label: `Goal: ${activeGoal}${metric === 'calories' ? ' cal' : 'g'}`,
+                data: Array(labels.length).fill(activeGoal),
+                borderColor: '#10b981',
+                borderDash: [4, 2],
+                fill: false,
+                tension: 0,
+                pointRadius: 0,
+                borderWidth: 2
+            });
+        }
+
+        // Show hint if there are targets
+        const hint = document.getElementById('trendChartLegendHint');
+        if (hint) hint.style.display = (datasets.length > 1) ? 'block' : 'none';
+
         trendChartInstance = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: labels,
-                datasets: [{
-                    label: metric.replace('_', ' ').toUpperCase(),
-                    data: values,
-                    borderColor: '#500000',
-                    backgroundColor: 'rgba(80, 0, 0, 0.05)',
-                    fill: true,
-                    tension: 0.4,
-                    pointRadius: durationDays > 30 ? 0 : (hasData ? 4 : 0),
-                    borderWidth: 2
-                }]
+                datasets: datasets
             },
             options: {
                 responsive: true,
@@ -963,7 +1014,15 @@ async function updateTrendChart() {
                     y: { beginAtZero: true, grid: { color: '#f5f5f5' }, ticks: { display: hasData } },
                     x: { grid: { display: false }, ticks: { maxTicksLimit: 12, display: hasData } }
                 },
-                plugins: { legend: { display: false }, tooltip: { enabled: hasData } }
+                plugins: { 
+                    legend: { 
+                        display: datasets.length > 1, 
+                        position: 'top', 
+                        align: 'end',
+                        labels: { boxWidth: 12, font: { size: 10, weight: '600' } }
+                    }, 
+                    tooltip: { enabled: hasData } 
+                }
             }
         });
     } catch (e) { console.error('Trend load fail', e); }
