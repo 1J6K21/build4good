@@ -107,6 +107,19 @@ db.exec(`
     user_id TEXT,
     FOREIGN KEY(user_id) REFERENCES users(id)
   );
+
+  CREATE TABLE IF NOT EXISTS goal_presets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    breakfast_mod INTEGER DEFAULT 0,
+    lunch_mod INTEGER DEFAULT 0,
+    dinner_mod INTEGER DEFAULT 0,
+    snack_mod INTEGER DEFAULT 0,
+    projection_days INTEGER NOT NULL,
+    created_at INTEGER,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+  );
 `);
 
 // Migration: Add step column if it doesn't exist (handle existing DBs)
@@ -626,6 +639,23 @@ function deleteExperimentLog(logId, experimentId) {
   db.prepare('DELETE FROM experiment_logs WHERE id = ? AND experiment_id = ?').run(logId, experimentId);
 }
 
+// ── SAVED SCENARIOS ────────────────────────────────
+function getSavedScenarios(userId) {
+  return db.prepare('SELECT * FROM goal_presets WHERE user_id = ? ORDER BY created_at DESC').all(userId);
+}
+
+function createSavedScenario(userId, name, bMod, lMod, dMod, sMod, days) {
+  const result = db.prepare(`
+    INSERT INTO goal_presets (user_id, name, breakfast_mod, lunch_mod, dinner_mod, snack_mod, projection_days, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(userId, name, bMod, lMod, dMod, sMod, days, Date.now());
+  return result.lastInsertRowid;
+}
+
+function deleteSavedScenario(presetId, userId) {
+  db.prepare('DELETE FROM goal_presets WHERE id = ? AND user_id = ?').run(presetId, userId);
+}
+
 function getCalorieDebt(userId) {
   const user = getUser(userId);
   if (!user) return null;
@@ -708,5 +738,9 @@ module.exports = {
   addExperimentLog,
   deleteExperiment,
   deleteExperimentLog,
-  getCalorieDebt
+  getCalorieDebt,
+  getCalorieDebt,
+  getSavedScenarios,
+  createSavedScenario,
+  deleteSavedScenario
 };

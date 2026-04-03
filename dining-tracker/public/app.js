@@ -343,6 +343,30 @@ async function logGlobalItemByFdcId(fdcId, fName) {
     }
 }
 
+function getMaintenanceCalories() {
+    if (!currentUser) return 2000;
+    
+    // Check if we have enough info
+    if (!currentUser.weight || !currentUser.height) {
+        return parseInt(currentUser.calorie_goal) || 2000;
+    }
+
+    const weightLbs = parseFloat(currentUser.weight);
+    const heightIn = parseFloat(currentUser.height);
+    if (isNaN(weightLbs) || isNaN(heightIn)) return parseInt(currentUser.calorie_goal) || 2000;
+
+    const wKg = weightLbs * 0.453592;
+    const hCm = heightIn * 2.54;
+    const age = 20; // Default
+    
+    // Check localStorage for activity level first (synced in saveGoals)
+    const storedActivity = localStorage.getItem('userActivity');
+    const activityLvl = storedActivity ? parseFloat(storedActivity) : 1.55; 
+
+    const bmr = (10 * wKg) + (6.25 * hCm) - (5 * age) + 5;
+    return Math.round(bmr * activityLvl);
+}
+
 // ── Dashboard ─────────────────────────────
 
 async function updateCalorieDebtWidget() {
@@ -399,6 +423,17 @@ async function refreshDashboard() {
 
     const date = trackingDate || todayStr();
     const logs = await fetchLogs(date);
+    
+    try {
+        const scenariosRes = await authFetch(`${API}/api/user/saved-scenarios`);
+        const scenariosData = await scenariosRes.json();
+        window.savedScenarios = scenariosData.presets || [];
+        renderSavedScenarios();
+    } catch (e) {
+        console.error("Scenario fetch failed", e);
+        window.savedScenarios = [];
+        renderSavedScenarios();
+    }
     
     // Fetch 30-day history for a dynamic "Semester GPA" calculation
     const monthStart = new Date(new Date(date + 'T12:00:00').getTime() - (29 * 24 * 60 * 60 * 1000));
@@ -2590,18 +2625,9 @@ async function updateWeightProjection() {
             `;
         }
 
-        // TDEE estimate (use goal as fallback or formula)
-        let tdee = currentUser.calorie_goal || 2000;
-        if (currentUser.weight && currentUser.height) {
-            const wKg = currentUser.weight * 0.453592;
-            const hCm = currentUser.height * 2.54;
-            const age = 20; // Default
-            const bmr = (10 * wKg) + (6.25 * hCm) - (5 * age) + 5;
-            tdee = Math.round(bmr * 1.4);
-        }
-
-        const projectionDays = parseInt(document.getElementById('projectionPeriod')?.value || '90');
-        const surplus = dailyCals - tdee;
+        // TDEE estimate (use formula with maintenance calories)
+        const maintenance = getMaintenanceCalories();
+        const surplus = dailyCals - maintenance;
         const totalSurplus = surplus * projectionDays;
         const weightChange = totalSurplus / 3500;
 
@@ -2634,7 +2660,7 @@ let lastWeightDelta = 0;
 async function initSimulatorBaseline() {
     if (window.simBaseline) return window.simBaseline;
     
-    console.log("[Simulator] Initializing baseline from last 14 days...");
+    const fallback = { breakfast: 0, lunch: 0, dinner: 0, snack: 0, total: 0 };
     let endD = new Date();
     let startD = new Date();
     startD.setDate(endD.getDate() - 13); // 14 days total
@@ -2673,7 +2699,8 @@ async function initSimulatorBaseline() {
         return window.simBaseline;
     } catch (e) {
         console.error("Baseline fetch failed", e);
-        return null;
+        window.simBaseline = fallback;
+        return fallback;
     }
 }
 
@@ -2681,8 +2708,10 @@ async function updateFutureProjection() {
     if (!currentUser) return;
     
     const baseline = await initSimulatorBaseline();
-    if (!baseline) return;
+    // No early return, proceed with fallback baseline if needed
 
+    const maintenance = getMaintenanceCalories();
+    const startWeight = parseFloat(currentUser.weight) || 150;
     const projectionDays = parseInt(document.getElementById('simPeriod')?.value || '90');
     
     const breakfastMod = parseInt(document.getElementById('simBreakfast')?.value || '0');
@@ -2708,10 +2737,14 @@ async function updateFutureProjection() {
                         Math.max(0, baseline.dinner + dinnerMod) + 
                         Math.max(0, baseline.snack + snackMod);
 
-    if (document.getElementById('simNewAvg')) document.getElementById('simNewAvg').textContent = Math.round(simDailyAvg) + ' cals';
+    // Math: Weight delta = (simDailyAvg - maintenance) * days / 3500
+    const weightDelta = (simDailyAvg - maintenance) * projectionDays / 3500;
 
-    // Math: Weight delta = (simDailyAvg - baselineAvg) * days / 3500
-    const weightDelta = (simDailyAvg - baseline.total) * projectionDays / 3500;
+    if (document.getElementById('simNewAvg')) document.getElementById('simNewAvg').textContent = Math.round(simDailyAvg) + ' cals';
+    if (document.getElementById('simDelta')) {
+        const finalWeight = startWeight + weightDelta;
+        document.getElementById('simDelta').textContent = (isNaN(finalWeight)) ? "-- lbs" : finalWeight.toFixed(1) + ' lbs';
+    }
     
     // Hero Number Update
     const heroEl = document.getElementById('simConsequenceNumber');
@@ -2724,7 +2757,7 @@ async function updateFutureProjection() {
         const monthName = targetDate.toLocaleString('default', { month: 'long' });
 
         const formattedDelta = (weightDelta >= 0 ? '+' : '−') + Math.abs(weightDelta).toFixed(1);
-        mainNum.textContent = `${formattedDelta} lbs by ${monthName}`;
+        mainNum.textContent = (isNaN(weightDelta)) ? "-- lbs by --" : `${formattedDelta} lbs by ${monthName}`;
         
         if (weightDelta > 0.1) mainNum.style.color = 'var(--red)';
         else if (weightDelta < -0.1) mainNum.style.color = 'var(--green)';
@@ -2752,15 +2785,16 @@ async function updateFutureProjection() {
     }
 
     // Update the chart for visual context
-    const startWeight = parseFloat(currentUser.weight) || 150;
     const labels = [];
     const baselinePoints = [];
     const simPoints = [];
     
     for (let i = 0; i <= projectionDays; i += Math.max(1, Math.floor(projectionDays/10))) {
         labels.push('Day ' + i);
-        baselinePoints.push(startWeight);
-        simPoints.push(startWeight + ((simDailyAvg - baseline.total) * i / 3500));
+        // Trajectory for current habits (baseline vs maintenance)
+        baselinePoints.push(startWeight + ((baseline.total - maintenance) * i / 3500));
+        // Trajectory for simulated habits (simDailyAvg vs maintenance)
+        simPoints.push(startWeight + ((simDailyAvg - maintenance) * i / 3500));
     }
 
     const canvas = document.getElementById('futureChart');
@@ -2778,7 +2812,27 @@ async function updateFutureProjection() {
                 },
                 {
                    label: 'Simulated Habits', data: simPoints, borderColor: '#500000', backgroundColor: 'rgba(80, 0, 0, 0.05)', fill: true, tension: 0.3, pointRadius: 0, borderWidth: 3
-                }
+                },
+                ...(window.savedScenarios || []).map((p, idx) => {
+                    const presetPoints = [];
+                    const pSimAvg = Math.max(0, (baseline.breakfast || 0) + (p.breakfast_mod || 0)) + 
+                                  Math.max(0, (baseline.lunch || 0) + (p.lunch_mod || 0)) + 
+                                  Math.max(0, (baseline.dinner || 0) + (p.dinner_mod || 0)) + 
+                                  Math.max(0, (baseline.snack || 0) + (p.snack_mod || 0));
+                    for (let i = 0; i <= projectionDays; i += Math.max(1, Math.floor(projectionDays/10))) {
+                        presetPoints.push(startWeight + ((pSimAvg - maintenance) * i / 3500));
+                    }
+                    return {
+                        label: p.name,
+                        data: presetPoints,
+                        borderColor: `hsl(${(idx * 137.5) % 360}, 60%, 50%)`,
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: 0,
+                        borderWidth: 2,
+                        borderDash: [3, 3]
+                    };
+                })
             ]
         },
         options: {
@@ -2802,6 +2856,66 @@ async function updateFutureProjection() {
     });
 }
 
+async function saveScenario() {
+    const name = prompt("Enter a name for this habit scenario:", "New Daily Strategy");
+    if (!name) return;
+
+    const bMod = parseInt(document.getElementById('simBreakfast')?.value || '0');
+    const lMod = parseInt(document.getElementById('simLunch')?.value || '0');
+    const dMod = parseInt(document.getElementById('simDinner')?.value || '0');
+    const sMod = parseInt(document.getElementById('simSnack')?.value || '0');
+    const days = parseInt(document.getElementById('simPeriod')?.value || '90');
+
+    try {
+        const res = await authFetch(`${API}/api/user/saved-scenarios`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, bMod, lMod, dMod, sMod, days })
+        });
+        if (res.ok) {
+            toast(`Saved scenario: ${name}`);
+            refreshDashboard(); 
+        }
+    } catch (e) {
+        console.error("Failed to save scenario", e);
+    }
+}
+
+function renderSavedScenarios() {
+    const list = document.getElementById('simPresetList');
+    if (!list) return;
+
+    if (!window.savedScenarios || window.savedScenarios.length === 0) {
+        list.innerHTML = '<p style="font-size:0.75rem; color:var(--text-3); text-align:center;">No saved scenarios yet.</p>';
+        return;
+    }
+
+    list.innerHTML = window.savedScenarios.map(p => `
+        <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-2); padding:8px 12px; border-radius:8px; border:1px solid var(--border);">
+            <div>
+                <div style="font-weight:bold; font-size:0.85rem;">${p.name}</div>
+                <div style="font-size:0.7rem; color:var(--text-3);">${p.projection_days} days • mods: ${p.breakfast_mod}/${p.lunch_mod}/${p.dinner_mod}/${p.snack_mod}</div>
+            </div>
+            <button onclick="deleteSavedScenario(${p.id})" style="background:none; border:none; color:var(--red); cursor:pointer; padding:4px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6"/></svg>
+            </button>
+        </div>
+    `).join('');
+}
+
+async function deleteSavedScenario(id) {
+    if (!confirm("Delete this saved scenario?")) return;
+    try {
+        const res = await authFetch(`${API}/api/user/saved-scenarios/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+            toast("Scenario deleted");
+            refreshDashboard();
+        }
+    } catch (e) {
+        console.error("Delete failed", e);
+    }
+}
+
 window.getSimulatorState = function() {
     if (!window.simBaseline) return null;
     const projectionDays = parseInt(document.getElementById('simPeriod')?.value || '90');
@@ -2820,7 +2934,7 @@ window.getSimulatorState = function() {
         mods: { breakfastMod, lunchMod, dinnerMod, snackMod },
         projectionDays,
         simDailyAvg,
-        weightDelta: (simDailyAvg - window.simBaseline.total) * projectionDays / 3500
+        weightDelta: (simDailyAvg - getMaintenanceCalories()) * projectionDays / 3500
     };
 };
 

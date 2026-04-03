@@ -13,7 +13,8 @@ const {
     addWaitTime, getWaitTimeStats, getWaitTimeStatsAll, clearStaleJobs,
     updateExperimentStatus, getExperimentLogs, addExperimentLog, deleteExperiment,
     deleteExperimentLog, getExperiments, createExperiment,
-    getLeaderboard, getTopItems, findDiningTwin, getCalorieDebt
+    getLeaderboard, getTopItems, findDiningTwin, getCalorieDebt,
+    getSavedScenarios, createSavedScenario, deleteSavedScenario
 } = require('./db');
 
 // Run DB cleanup on startup
@@ -205,6 +206,23 @@ app.post('/api/user/goals', authenticateToken, async (req, res) => {
     if (calorieGoal) await updateCalorieGoal(req.user.id, parseInt(calorieGoal));
     await updateUserGoals(req.user.id, parseInt(proteinGoal), parseInt(fatGoal), parseInt(carbGoal));
     if (height || weight) await updateUserStats(req.user.id, height ? parseInt(height) : null, weight ? parseInt(weight) : null);
+    res.json({ success: true });
+});
+
+// Saved Scenarios
+app.get('/api/user/saved-scenarios', authenticateToken, async (req, res) => {
+    const presets = getSavedScenarios(req.user.id);
+    res.json({ presets });
+});
+
+app.post('/api/user/saved-scenarios', authenticateToken, async (req, res) => {
+    const { name, bMod, lMod, dMod, sMod, days } = req.body;
+    const id = createSavedScenario(req.user.id, name, bMod, lMod, dMod, sMod, days);
+    res.json({ success: true, id });
+});
+
+app.delete('/api/user/saved-scenarios/:id', authenticateToken, async (req, res) => {
+    deleteSavedScenario(req.params.id, req.user.id);
     res.json({ success: true });
 });
 

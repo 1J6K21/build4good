@@ -579,6 +579,16 @@
                                     <span class="sim-label">Projected Final Weight</span>
                                     <span class="sim-val" id="simDelta">-- lbs</span>
                                 </div>
+                                <div class="sim-summary-actions" style="margin-top: 15px; display: flex; gap: 8px;">
+                                    <button class="btn btn-secondary" onclick="saveScenario()" style="flex:1; font-size: 0.8rem; padding: 6px 12px;">Save as Scenario</button>
+                                </div>
+                            </div>
+
+                            <div id="simSavedPresets" style="margin-top: 20px; border-top: 1px solid var(--border); padding-top: 15px;">
+                                <h4 style="font-size:0.8rem; margin-bottom:10px; color:var(--text-3); text-transform: uppercase; letter-spacing: 0.05em;">Saved Scenarios</h4>
+                                <div id="simPresetList" style="display:flex; flex-direction:column; gap:8px;">
+                                    <!-- Saved presets go here -->
+                                </div>
                             </div>
                         </div>
                     </div>
