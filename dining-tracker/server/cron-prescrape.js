@@ -110,8 +110,10 @@ async function prescrapeAll() {
 
     let passed = 0, failed = 0;
 
-    for (const { loc, period, date } of jobs) {
+    for (let i = 0; i < jobs.length; i++) {
+        const { loc, period, date } = jobs[i];
         console.log(`\n[cron] ── Scraping: ${loc} / ${period} ──`);
+        let wasScraped = false;
         try {
             const status = await triggerScrape(loc, period, date);
             if (status === 'ready') {
@@ -119,6 +121,7 @@ async function prescrapeAll() {
                 console.log(`[cron] ✅ Already cached — skipping poll.`);
                 passed++;
             } else {
+                wasScraped = true;
                 const ok = await waitForScrape(loc, period, date);
                 if (ok) { console.log(`[cron] ✅ Done.`); passed++; }
                 else { console.log(`[cron] ❌ Failed or timed out.`); failed++; }
@@ -128,8 +131,9 @@ async function prescrapeAll() {
             failed++;
         }
 
-        // Stagger scrape starts to be polite to dineoncampus.com
-        if (jobs.indexOf(jobs.find(j => j.loc === loc && j.period === period)) < jobs.length - 1) {
+        // Stagger scrape starts ONLY IF we actually scraped, to be polite to dineoncampus.com
+        // and only if this isn't the very last job.
+        if (wasScraped && i < jobs.length - 1) {
             console.log(`[cron] ⏳ Staggering ${STAGGER_MS / 1000}s before next job...`);
             await sleep(STAGGER_MS);
         }
@@ -139,7 +143,10 @@ async function prescrapeAll() {
     console.log(`[cron] Pre-scrape complete — ✅ ${passed} passed / ❌ ${failed} failed`);
     console.log(`[cron] ═══════════════════════════════════════════\n`);
 
-    process.exit(failed > 0 ? 1 : 0);
+    // If running as a standalone entry point, exit.
+    if (require.main === module) {
+        process.exit(failed > 0 ? 1 : 0);
+    }
 }
 
 // ── Scheduler ────────────────────────────────────────────────────────────────

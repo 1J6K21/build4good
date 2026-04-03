@@ -1,0 +1,13 @@
+name: Daily Menu Pre-Scrape
+on:
+  schedule:
+    # 10:00 AM UTC is 5:00 AM CST (winter) or 11:00 AM UTC is 5:00 AM CST (summer)
+    - cron: '0 10 * * *' 
+  workflow_dispatch: # Allow manual trigger from GitHub UI
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake up Mindful Macros
+        run: curl -sL https://mindful-macros.fly.dev/api/auth/config

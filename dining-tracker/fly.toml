@@ -21,11 +21,10 @@ primary_region = "ord"              # Chicago — High capacity for 1GB machines
   internal_port       = 3333
   force_https         = true
   # --- COST / SLEEP SETTINGS ---
-  # During demo: Set auto_stop_machines=false to keep app hot.
-  # After demo: Set auto_stop_machines=true and min_machines_running=0 to spend $0.
-  auto_stop_machines  = false   
+  # Current: Auto-stop enabled. First user of the day will wake it up.
+  auto_stop_machines  = true   
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 0
 
   [http_service.concurrency]
     type       = "connections"

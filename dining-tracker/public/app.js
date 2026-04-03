@@ -188,8 +188,13 @@ function showPage(name) {
         fetchTopLeaderboard();
         fetchLeaderboard();
     }
-    if (name === 'mirror') fetchMirror();
-    if (name === 'experiments') fetchExperiments();
+    // Toggle Station Navigation Controls
+    const navControls = document.getElementById('stationNavControls');
+    if (navControls) {
+        // Only show if we're on the menu page AND there are stations to navigate
+        const stations = document.querySelectorAll('.station-block');
+        navControls.style.display = (name === 'menu' && stations.length > 0) ? 'flex' : 'none';
+    }
 }
 
 // ── GLOBAL FOOD SEARCH (USDA API) ─────────────────────────
@@ -1323,6 +1328,10 @@ function renderMenu(stations, locName, period, date, waitStats = []) {
         </div>
     </div>
     ` + (spotlightActive ? getSpotlightHtml(visibleStations, waitStats, locSlug) : getStandardMenuHtml(visibleStations, waitStats, locSlug));
+
+    // Show navigation controls if stations are present
+    const navControls = document.getElementById('stationNavControls');
+    if (navControls) navControls.style.display = 'flex';
 }
 
 function toggleSpotlight() {
@@ -4362,6 +4371,79 @@ function exportReportAsImage() {
         toast('Export failed. Try again.');
         element.style.boxShadow = originalShadow;
     });
+}
+
+// ── Station Navigation ──────────────────────────
+
+function jumpToNextStation() {
+    const stations = document.querySelectorAll('.station-block');
+    if (!stations.length) return;
+    
+    const headerOffset = 100; // Account for sticky navbar and filter bar
+    let currentIndex = -1;
+    
+    // Find current station index
+    stations.forEach((s, i) => {
+        const rect = s.getBoundingClientRect();
+        if (rect.top <= headerOffset + 20) {
+            currentIndex = i;
+        }
+    });
+
+    let nextIndex = currentIndex + 1;
+    
+    // IF at the last one, do nothing (don't loop)
+    if (nextIndex >= stations.length) {
+        toast('End of menu');
+        return;
+    }
+    
+    const target = stations[nextIndex];
+    const offsetPosition = target.getBoundingClientRect().top + window.pageYOffset - headerOffset;
+    
+    window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
+}
+
+function jumpToPrevStation() {
+    const stations = document.querySelectorAll('.station-block');
+    if (!stations.length) return;
+    
+    const headerOffset = 100;
+    let currentIndex = -1;
+    
+    stations.forEach((s, i) => {
+        const rect = s.getBoundingClientRect();
+        if (rect.top <= headerOffset + 20) {
+            currentIndex = i;
+        }
+    });
+
+    // To go "Up":
+    // If we're scrolled a bit into the current station, go to the top of THIS one first.
+    // If we're already at the top of the current one, go to the previous one.
+    if (currentIndex < 0) {
+        toast('Top of menu');
+        return;
+    }
+
+    const currentRect = stations[currentIndex].getBoundingClientRect();
+    let prevIndex;
+    
+    if (currentRect.top < headerOffset - 15) {
+        prevIndex = currentIndex;
+    } else {
+        prevIndex = currentIndex - 1;
+    }
+
+    if (prevIndex < 0) {
+        toast('Top of menu');
+        return;
+    }
+    
+    const target = stations[prevIndex];
+    const offsetPosition = target.getBoundingClientRect().top + window.pageYOffset - headerOffset;
+    
+    window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
 }
 
 // ── End of Mindful Macros Application Logic ──
