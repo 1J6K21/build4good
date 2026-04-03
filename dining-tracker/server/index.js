@@ -23,6 +23,19 @@ setInterval(() => cleanupMenus(30), 24 * 60 * 60 * 1000);
 
 const { startScrapeProcess } = require('./scraper');
 
+// Start the 05:00 AM daily pre-scraper scheduler
+const { prescrapeAll, schedulePrescrape } = require('./cron-prescrape');
+
+// TRIGGER ON STARTUP:
+// This ensures that if you deploy at 10:00 AM, the server fetches "today" 
+// in the background right now instead of waiting until 5 AM tomorrow.
+setTimeout(() => {
+    console.log('[Startup] Executing background pre-scrape check...');
+    prescrapeAll().catch(e => console.error('[Startup] Pre-scrape error:', e));
+}, 10_000); // Wait 10s for the server to be fully hot
+
+schedulePrescrape();
+
 // --- STARTUP CLEANUP ---
 // Clear any "scraping" jobs that were orphaned when the server last stopped/crashed.
 const staleDeleted = clearStaleJobs();

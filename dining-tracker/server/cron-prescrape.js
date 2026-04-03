@@ -171,10 +171,13 @@ function schedulePrescrape() {
     }, ms);
 }
 
-// Allow running immediately via: node server/cron-prescrape.js --now
-if (process.argv.includes('--now')) {
+// Export functions for use in server/index.js
+module.exports = { prescrapeAll, schedulePrescrape };
+
+// Allow running immediately via CLI: node server/cron-prescrape.js --now
+if (require.main === module && process.argv.includes('--now')) {
     console.log('[cron] --now flag detected: running prescrape immediately.');
     prescrapeAll().catch(e => { console.error('[cron] FATAL:', e); process.exit(1); });
-} else {
+} else if (require.main === module) {
     schedulePrescrape();
 }
