@@ -2856,6 +2856,42 @@ async function updateFutureProjection() {
         simPoints.push(startWeight + ((simDailyAvg - maintenance) * i / 3500));
     }
 
+    const allDatasets = [
+        {
+            label: 'Current Habits', data: baselinePoints, borderColor: '#94a3b8', borderDash: [5, 5], fill: false, tension: 0.3, pointRadius: 0
+        },
+        {
+            label: 'Simulated Habits', data: simPoints, borderColor: '#500000', backgroundColor: 'rgba(80, 0, 0, 0.05)', fill: true, tension: 0.3, pointRadius: 0, borderWidth: 3
+        },
+        ...(window.savedScenarios || []).map((p, idx) => {
+            const presetPoints = [];
+            const pSimAvg = Math.max(0, (baseline.breakfast || 0) + (p.breakfast_mod || 0)) + 
+                          Math.max(0, (baseline.lunch || 0) + (p.lunch_mod || 0)) + 
+                          Math.max(0, (baseline.dinner || 0) + (p.dinner_mod || 0)) + 
+                          Math.max(0, (baseline.snack || 0) + (p.snack_mod || 0));
+            for (let i = 0; i <= projectionDays; i += Math.max(1, Math.floor(projectionDays/10))) {
+                presetPoints.push(startWeight + ((pSimAvg - maintenance) * i / 3500));
+            }
+            return {
+                label: p.name,
+                data: presetPoints,
+                borderColor: `hsl(${(idx * 137.5) % 360}, 60%, 50%)`,
+                fill: false,
+                tension: 0.3,
+                pointRadius: 0,
+                borderWidth: 2,
+                borderDash: [3, 3]
+            };
+        })
+    ];
+
+    // Sort datasets by final weight ascending
+    allDatasets.sort((a, b) => {
+        const aVal = a.data[a.data.length - 1];
+        const bVal = b.data[b.data.length - 1];
+        return aVal - bVal;
+    });
+
     const canvas = document.getElementById('futureChart');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -2865,34 +2901,7 @@ async function updateFutureProjection() {
         type: 'line',
         data: {
             labels: labels,
-            datasets: [
-                {
-                   label: 'Current Habits', data: baselinePoints, borderColor: '#94a3b8', borderDash: [5, 5], fill: false, tension: 0.3, pointRadius: 0
-                },
-                {
-                   label: 'Simulated Habits', data: simPoints, borderColor: '#500000', backgroundColor: 'rgba(80, 0, 0, 0.05)', fill: true, tension: 0.3, pointRadius: 0, borderWidth: 3
-                },
-                ...(window.savedScenarios || []).map((p, idx) => {
-                    const presetPoints = [];
-                    const pSimAvg = Math.max(0, (baseline.breakfast || 0) + (p.breakfast_mod || 0)) + 
-                                  Math.max(0, (baseline.lunch || 0) + (p.lunch_mod || 0)) + 
-                                  Math.max(0, (baseline.dinner || 0) + (p.dinner_mod || 0)) + 
-                                  Math.max(0, (baseline.snack || 0) + (p.snack_mod || 0));
-                    for (let i = 0; i <= projectionDays; i += Math.max(1, Math.floor(projectionDays/10))) {
-                        presetPoints.push(startWeight + ((pSimAvg - maintenance) * i / 3500));
-                    }
-                    return {
-                        label: p.name,
-                        data: presetPoints,
-                        borderColor: `hsl(${(idx * 137.5) % 360}, 60%, 50%)`,
-                        fill: false,
-                        tension: 0.3,
-                        pointRadius: 0,
-                        borderWidth: 2,
-                        borderDash: [3, 3]
-                    };
-                })
-            ]
+            datasets: allDatasets
         },
         options: {
             responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
@@ -2903,6 +2912,7 @@ async function updateFutureProjection() {
             plugins: {
                 legend: { position: 'top', align: 'end', labels: { boxWidth: 12, font: { weight: 'bold', size: 11 } } },
                 tooltip: {
+                    itemSort: (a, b) => b.raw - a.raw,
                     callbacks: { label: (context) => {
                            let label = context.dataset.label || '';
                            if (label) label += ': ';
@@ -2953,7 +2963,7 @@ function renderSavedScenarios() {
         <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-2); padding:8px 12px; border-radius:8px; border:1px solid var(--border);">
             <div>
                 <div style="font-weight:bold; font-size:0.85rem;">${p.name}</div>
-                <div style="font-size:0.7rem; color:var(--text-3);">${p.projection_days} days • mods: ${p.breakfast_mod}/${p.lunch_mod}/${p.dinner_mod}/${p.snack_mod}</div>
+                <div style="font-size:0.7rem; color:var(--text-3);">${p.projection_days} days • eat: ${Math.max(0, (window.simBaseline?.breakfast || 0) + p.breakfast_mod)}/${Math.max(0, (window.simBaseline?.lunch || 0) + p.lunch_mod)}/${Math.max(0, (window.simBaseline?.dinner || 0) + p.dinner_mod)}/${Math.max(0, (window.simBaseline?.snack || 0) + p.snack_mod)} cal</div>
             </div>
             <button onclick="deleteSavedScenario(${p.id})" style="background:none; border:none; color:var(--red); cursor:pointer; padding:4px;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6"/></svg>
