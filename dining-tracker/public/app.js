@@ -1317,7 +1317,7 @@ async function loadLocations() {
     }
 }
 
-async function loadMenu() {
+async function loadMenu(force = false) {
     const sel = document.getElementById('locationSelect');
     if (!sel.value) return;
     const locData = JSON.parse(sel.value);
@@ -1337,8 +1337,8 @@ async function loadMenu() {
     }
 
     showLoading(true);
-    console.log(`[Frontend] Fetching menu for: ${locData.slug} | ${activePeriodSlug} | ${date}`);
-    const res = await fetch(`${API}/api/menu?locationSlug=${encodeURIComponent(locData.slug)}&periodSlug=${encodeURIComponent(activePeriodSlug)}&date=${date}`);
+    console.log(`[Frontend] Fetching menu for: ${locData.slug} | ${activePeriodSlug} | ${date}${force ? ' (FORCE)' : ''}`);
+    const res = await fetch(`${API}/api/menu?locationSlug=${encodeURIComponent(locData.slug)}&periodSlug=${encodeURIComponent(activePeriodSlug)}&date=${date}${force ? '&refresh=true' : ''}`);
     const data = await res.json();
     console.log('[Frontend] Menu API response:', data);
 
@@ -2118,7 +2118,7 @@ function renderError(msg) {
             <div class="empty-icon text-red"><i class="fa-solid fa-triangle-exclamation"></i></div>
             <p><strong>Something went wrong.</strong></p>
             <p class="form-hint">${msg}</p>
-            <button class="btn btn-primary" style="margin-top:1rem" onclick="loadMenu()">Retry</button>
+            <button class="btn btn-primary" style="margin-top:1rem" onclick="loadMenu(true)">Retry</button>
         </div>
     `;
 }
@@ -2484,25 +2484,7 @@ async function fetchWaitTimes(slug) {
 }
 
 async function forceRescrape() {
-    const sel = document.getElementById('locationSelect');
-    if (!sel.value) return;
-    const locData = JSON.parse(sel.value);
-    const date = document.getElementById('dateInput').value || todayStr();
-
-    toast('Force-refreshing menu data...');
-    showLoading(true);
-    const res = await fetch(`${API}/api/menu?locationSlug=${encodeURIComponent(locData.slug)}&periodSlug=${encodeURIComponent(activePeriodSlug)}&date=${date}&refresh=true`);
-    const data = await res.json();
-
-    if (data.status === 'scraping') {
-        showLoading(false);
-        renderScraping(data.step);
-        pollScrape(locData.slug, date);
-    } else if (data.status === 'ready') {
-        showLoading(false);
-        const waitStats = await fetchWaitTimes(locData.slug);
-        renderMenu(data.stations, locData.name, activePeriodSlug, date, waitStats);
-    }
+    loadMenu(true);
 }
 
 function toggleWaitReporter(header) {
@@ -2592,30 +2574,7 @@ async function updateWaitDisplay(slug, stats) {
     }
 }
 
-async function forceRescrape() {
-    const sel = document.getElementById('locationSelect');
-    if (!sel.value) return;
-    const locData = JSON.parse(sel.value);
-    const date = document.getElementById('dateInput').value || todayStr();
-
-    showLoading(true);
-    toast('Triggering fresh menu fetch...');
-
-    const res = await fetch(`${API}/api/menu?locationSlug=${encodeURIComponent(locData.slug)}&periodSlug=${encodeURIComponent(activePeriodSlug)}&date=${date}&refresh=true`);
-    const data = await res.json();
-
-    if (data.status === 'ready') {
-        showLoading(false);
-        renderMenu(data.stations, locData.name, activePeriodSlug, date);
-    } else if (data.status === 'scraping') {
-        showLoading(false);
-        renderScraping(data.step);
-        pollScrape(locData.slug, date);
-    } else if (data.status === 'failed') {
-        showLoading(false);
-        renderError(data.error || 'Scrape failed');
-    }
-}
+// forceRescrape moved above and consolidated
 /* ── WEIGHT ACCOUNTABILITY ────────────────────────── */
 
 async function updateWeightProjection() {

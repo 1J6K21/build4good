@@ -450,12 +450,18 @@ app.get('/api/menu', async (req, res) => {
     const job = await getScrapeJob(locationSlug, periodSlug, date);
     if (job) {
         console.log(`[API] Job existing for ${locationSlug}: ${job.status}`);
-        if (job.status === 'failed') return res.json({ status: 'failed', error: job.error });
-        if (job.status === 'ready' || job.status === 'done' || job.status === 'success') {
-          // If the job says ready but menu is missing (deleted), allow it to continue
-          console.log(`[API] Job says ready but menu might be missing, starting over.`);
+        // If it failed previously, we can allow starting a new one here if we want to be generous, 
+        // OR we return failed. Let's return failed but the frontend should use refresh=true to bypass.
+        // Actually, let's make it so if status is failed, we allow falling through to start a new job!
+        if (job.status === 'failed') {
+            console.log(`[API] Previous job failed, allowing restart.`);
         } else {
-          return res.json({ status: 'scraping', step: job.step || job.status });
+            if (job.status === 'ready' || job.status === 'done' || job.status === 'success') {
+                // If the job says ready but menu is missing (deleted), allow it to continue
+                console.log(`[API] Job says ready but menu might be missing, starting over.`);
+            } else {
+                return res.json({ status: 'scraping', step: job.step || job.status });
+            }
         }
     }
 
