@@ -298,9 +298,9 @@ async function searchGlobalFood() {
                             ${f.brandName || f.dataType || 'Common Food'}
                         </div>
                         <div style="display: flex; gap: 12px; font-size: 0.75rem; font-weight: 700; color: var(--text-2);">
-                            <span><strong style="color:var(--primary)">${Math.round(pro)}g</strong> P</span>
-                            <span><strong style="color:var(--primary)">${Math.round(carb)}g</strong> C</span>
-                            <span><strong style="color:var(--primary)">${Math.round(fat)}g</strong> F</span>
+                            <span class="macro-p"><strong style="color:var(--primary)">${Math.round(pro * servings)}g</strong> P</span>
+                            <span class="macro-c"><strong style="color:var(--primary)">${Math.round(carb * servings)}g</strong> C</span>
+                            <span class="macro-f"><strong style="color:var(--primary)">${Math.round(fat * servings)}g</strong> F</span>
                         </div>
                     </div>
                     <div style="text-align: right; border-left: 1px solid var(--border); padding-left: 15px; margin-left: 15px; min-width: 100px; display: flex; flex-direction: column; align-items: flex-end;">
@@ -1788,11 +1788,22 @@ function renderItem(item, isSpotlight) {
         <div class="item-badges">
             ${(item.badges || []).map(b => `<span class="badge badge-${b}">${b}</span>`).join('')}
         </div>
-        <div class="item-cal-display" data-base-cal="${item.calories}">${Math.round(item.calories * servings)} cal</div>
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 4px;">
+            <div class="item-cal-display" data-base-cal="${item.calories}">${Math.round(item.calories * servings)} cal</div>
+            ${(()=> {
+                const portion = item.portion || '';
+                let bVal = 0, u = '';
+                const m = portion.match(/^([\d\.]+)\s*(.*)$/);
+                if (m) { bVal = parseFloat(m[1]); u = m[2]; } else { u = portion; }
+                if (!u && !bVal) return '';
+                return `<div class="item-serving-ref" style="font-size: 0.65rem; color: var(--primary); font-weight: 950; text-transform: uppercase; letter-spacing: 0.02em;" data-base-val="${bVal}" data-unit="${u}">Ref: ${bVal ? Math.round(bVal * servings) : ''} ${u}</div>`;
+            })()}
+        </div>
+        
         <div class="item-macros-preview">
-            <span class="item-macro">P <strong>${item.protein || 0}g</strong></span>
-            <span class="item-macro">F <strong>${item.fat || 0}g</strong></span>
-            <span class="item-macro">C <strong>${item.carbs || 0}g</strong></span>
+            <span class="item-macro macro-p">P <strong>${Math.round((item.protein || 0) * servings)}g</strong></span>
+            <span class="item-macro macro-f">F <strong>${Math.round((item.fat || 0) * servings)}g</strong></span>
+            <span class="item-macro macro-c">C <strong>${Math.round((item.carbs || 0) * servings)}g</strong></span>
         </div>
         ${getItemFlags(item)}
         <div class="item-serving-controls" onclick="event.stopPropagation()">
@@ -1889,9 +1900,20 @@ function updateServingState(idx, name, newVal) {
             const baseVal = parseFloat(refDisplay.getAttribute('data-base-val'));
             const unit = refDisplay.getAttribute('data-unit');
             if (baseVal && !isNaN(baseVal) && baseVal > 0) {
-                refDisplay.textContent = `Ref: ${Math.round(baseVal * newVal)}${unit}`;
+                refDisplay.textContent = `Ref: ${Math.round(baseVal * newVal)} ${unit}`;
+            } else if (unit) {
+                refDisplay.textContent = `Ref: ${unit}`;
             }
         }
+
+        // Dynamic Macros
+        const p = itemEl.querySelector('.macro-p strong');
+        const f = itemEl.querySelector('.macro-f strong');
+        const c = itemEl.querySelector('.macro-c strong');
+        const item = selectedItems[idx];
+        if (p) p.textContent = `${Math.round((item.protein || 0) * newVal)}g`;
+        if (f) f.textContent = `${Math.round((item.fat || 0) * newVal)}g`;
+        if (c) c.textContent = `${Math.round((item.carbs || 0) * newVal)}g`;
     }
 
     updateLogBar();
