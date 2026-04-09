@@ -213,9 +213,70 @@ function onGlobalSearchInput() {
     }, 400); // 400ms debounce
 }
 
-async function searchGlobalFood() {
+let barcodeScanner = null;
+
+async function toggleBarcodeScanner() {
+    const area = document.getElementById('barcodeScannerArea');
+    const btn = document.getElementById('btnToggleScanner');
+    
+    if (barcodeScanner) {
+        try {
+            await barcodeScanner.stop();
+        } catch(e) {}
+        barcodeScanner = null;
+        area.style.display = 'none';
+        btn.querySelector('span').textContent = 'Scan Barcode';
+        btn.classList.remove('btn-danger');
+        btn.classList.add('btn-secondary');
+        return;
+    }
+    
+    // Start scanning
+    area.style.display = 'block';
+    btn.querySelector('span').textContent = 'Stop Scanner';
+    btn.classList.remove('btn-secondary');
+    btn.classList.add('btn-danger');
+    
+    barcodeScanner = new Html5Qrcode("barcodeScannerArea");
+    const config = { fps: 10, qrbox: { width: 250, height: 150 } };
+    
+    barcodeScanner.start({ facingMode: "environment" }, config, (decodedText) => {
+        toast(`Scanned: ${decodedText}`);
+        toggleBarcodeScanner(); // stop and hide
+        document.getElementById('upcInput').value = decodedText;
+        searchByUPC(decodedText);
+    }).catch(err => {
+        console.error("Scanner failed", err);
+        toast("Camera error or permission denied.");
+        area.style.display = 'none';
+        btn.querySelector('span').textContent = 'Scan Barcode';
+        btn.classList.remove('btn-danger');
+        btn.classList.add('btn-secondary');
+        barcodeScanner = null;
+    });
+}
+
+function searchByUPC(manualUpc) {
+    const upcInput = document.getElementById('upcInput');
+    let upc = (manualUpc || upcInput.value).trim();
+    if (!upc) return;
+    
+    // Normalize: many scanners add a leading 0 to 12-digit UPCs (EAN-13 padding)
+    // USDA DB frequently expects the core 12-digit UPC-A.
+    if (upc.length === 13 && upc.startsWith('0')) {
+        upc = upc.substring(1);
+    }
+    
+    upcInput.value = upc; // Update UI with normalized version
+    
+    // UI feedback
+    document.getElementById('globalSearchInput').value = ''; // Clear name search
+    searchGlobalFood(upc);
+}
+
+async function searchGlobalFood(forcedQuery) {
     const input = document.getElementById('globalSearchInput');
-    const query = input.value.trim();
+    const query = forcedQuery || input.value.trim();
     if (!query) return;
 
     const resultsEl = document.getElementById('globalSearchResults');
@@ -238,7 +299,19 @@ async function searchGlobalFood() {
         }
 
         if (data.foods.length === 0 && query.length > 2) {
-            resultsEl.innerHTML = '<div class="empty-state"><p>No results found. Try a broader search.</p></div>';
+            let msg = 'No results found. Try a broader search.';
+            // Customize for potential barcode scans
+            if (/^\d{8,15}$/.test(query)) {
+                msg = `<div style="text-align:center;">
+                    <div style="font-weight: 700; margin-bottom: 12px; color: var(--text-1);">No match found for "${query}"</div>
+                    <div style="font-size: 0.85rem; color: var(--text-2); max-width: 400px; margin: 0 auto; line-height: 1.5;">
+                        <i class="fa-solid fa-circle-info" style="color: var(--primary); margin-right: 4px;"></i> 
+                        <strong>Pro-tip:</strong> Sometimes scanners accidentally add an extra leading zero. 
+                        Double-check the number printed directly under the barcode vs. what was scanned.
+                    </div>
+                </div>`;
+            }
+            resultsEl.innerHTML = `<div class="empty-state" style="padding: 60px 20px;">${msg}</div>`;
             return;
         }
 
@@ -249,10 +322,17 @@ async function searchGlobalFood() {
         }
 
         resultsEl.innerHTML = data.foods.map(f => {
-            const kcal = f.foodNutrients.find(n => n.nutrientId === 1008 || n.unitName === 'KCAL')?.value || 0;
-            const pro = f.foodNutrients.find(n => n.nutrientId === 1003)?.value || 0;
-            const fat = f.foodNutrients.find(n => n.nutrientId === 1004)?.value || 0;
-            const carb = f.foodNutrients.find(n => n.nutrientId === 1005)?.value || 0;
+            const ratio = (f.servingSize && f.servingSize > 0) ? (f.servingSize / 100) : 1.0;
+            
+            const getNutVal = (id) => {
+                const n = f.foodNutrients.find(x => x.nutrientId === id);
+                return n ? (n.value * ratio) : 0;
+            };
+
+            const kcal = getNutVal(1008);
+            const pro = getNutVal(1003);
+            const fat = getNutVal(1004);
+            const carb = getNutVal(1005);
             
             const basicItem = {
                 name: f.description,
@@ -260,9 +340,9 @@ async function searchGlobalFood() {
                 protein: Math.round(pro),
                 fat: Math.round(fat),
                 carbs: Math.round(carb),
-                fiber: f.foodNutrients.find(n => n.nutrientId === 1079 || n.nutrientId === 1082 || n.nutrientId === 1084)?.value || 0,
-                sugars: f.foodNutrients.find(n => n.nutrientId === 2000 || n.nutrientId === 2001)?.value || 0,
-                saturated_fat: f.foodNutrients.find(n => n.nutrientId === 1258)?.value || (fat * 0.3)
+                fiber: getNutVal(1079) || getNutVal(1082) || getNutVal(1084),
+                sugars: getNutVal(2000) || getNutVal(2001),
+                saturated_fat: getNutVal(1258) || (fat * 0.3)
             };
 
             // Calculate grade for search result
@@ -342,9 +422,10 @@ function toggleGlobalSearchItem(el, fdcId, basicItem) {
     if (isNowSelected) {
         // Background enrichment: fetch more nutrients and serving data
         authFetch(`${API}/api/external/food/${fdcId}`).then(res => res.json()).then(data => {
+            const ratio = (data.servingSize && data.servingSize > 0) ? (data.servingSize / 100) : 1.0;
             const getVal = (id) => {
                 const n = data.foodNutrients.find(x => x.nutrient.id === id || x.nutrientId === id);
-                return n ? (n.amount || n.value) : 0;
+                return n ? ((n.amount || n.value) * ratio) : 0;
             };
 
             const fullItem = {

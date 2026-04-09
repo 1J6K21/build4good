@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
     <link rel="stylesheet" href="style.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 
 <body>
@@ -807,6 +808,25 @@
                         <i class="fa-solid fa-magnifying-glass"></i> Search
                     </button>
                 </div>
+
+                <!-- Scanner & UPC Controls -->
+                <div style="margin-top: 15px; display: flex; flex-wrap: wrap; align-items: center; gap: 15px;">
+                    <button class="btn btn-secondary" id="btnToggleScanner" onclick="toggleBarcodeScanner()" style="display: flex; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-barcode"></i> <span>Scan Barcode</span>
+                    </button>
+                    
+                    <div id="manualUpcWrapper" style="display: flex; align-items: center; gap: 10px;">
+                        <span style="color: var(--text-3); font-size: 0.8rem; font-weight: 800;">OR</span>
+                        <input type="text" id="upcInput" class="form-input" placeholder="Manual UPC (e.g. 021130121703)" 
+                               onkeyup="if(event.key==='Enter') searchByUPC()"
+                               style="max-width: 250px; font-family: monospace; letter-spacing: 0.05em;">
+                        <button class="btn btn-secondary" onclick="searchByUPC()" title="Search by UPC">
+                            <i class="fa-solid fa-arrow-right"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="barcodeScannerArea" style="width: 100%; max-width: 500px; margin-top: 20px; display: none; border-radius: 12px; overflow: hidden; border: 2px solid var(--primary); box-shadow: 0 10px 25px rgba(0,0,0,0.1); background: #000;"></div>
                 
                 <div id="globalSearchLoading" class="loading-state" style="display:none; padding: 40px 0; text-align: center;">
                     <div class="spinner"></div>
