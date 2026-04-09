@@ -861,21 +861,7 @@
             <!-- Menu content -->
             <div id="menuContent"></div>
 
-            <!-- Floating log bar -->
-            <div class="log-bar" id="logBar" style="display:none">
-                <div id="negotiatorPanel" class="negotiator-panel" style="display:none"></div>
-                <div class="log-bar-inner">
-                    <div class="log-bar-info">
-                        <span id="logCount">0 items selected</span>
-                        <span class="log-cal-badge" id="logCalBadge">0 cal</span>
-                    </div>
-                    <span id="logGoalPct" class="log-goal-pct"></span>
-                    <div class="log-bar-actions">
-                        <button class="btn btn-ghost" onclick="clearSelection()">Clear</button>
-                        <button class="btn btn-success" onclick="openLogModal()">Log</button>
-                    </div>
-                </div>
-            </div>
+
 
             <!-- Station Navigation Controls -->
             <div id="stationNavControls" class="station-nav-controls" style="display:none">
@@ -1440,6 +1426,22 @@
                 <div class="report-legal">
                     OFFICIAL DOCUMENT // MINDFUL MACROS UNIVERSITY // SECURE TRANSCRIPT ID: <span id="reportId">---</span>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating log bar (Shared) -->
+    <div class="log-bar" id="logBar" style="display:none">
+        <div id="negotiatorPanel" class="negotiator-panel" style="display:none"></div>
+        <div class="log-bar-inner">
+            <div class="log-bar-info">
+                <span id="logCount">0 items selected</span>
+                <span class="log-cal-badge" id="logCalBadge">0 cal</span>
+            </div>
+            <span id="logGoalPct" class="log-goal-pct"></span>
+            <div class="log-bar-actions">
+                <button class="btn btn-ghost" onclick="clearSelection()">Clear</button>
+                <button class="btn btn-success" onclick="openLogModal()">Log</button>
             </div>
         </div>
     </div>

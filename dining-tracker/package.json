@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node server/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:scraper": "node tests/scraper.test.js",
+    "test:failure": "node tests/simulate_job_failure.js",
     "prescrape": "node server/cron-prescrape.js",
     "prescrape:now": "node server/cron-prescrape.js --now",
     "docker:build": "docker build -t mindful-macros .",
@@ -15,7 +16,7 @@
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f app",
     "docker:cron-logs": "docker compose logs -f cron",
-    "seed": "node server/seed.js"
+    "seed": "node tests/seed_db.js"
   },
   "keywords": [],
   "author": "",

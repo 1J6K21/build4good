@@ -30,6 +30,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
 COPY server/ ./server/
 COPY public/ ./public/
+COPY tests/ ./tests/
 
 # Persistent SQLite database lives in a mounted volume → /app/data
 # Create the directory so it exists even without a volume mount

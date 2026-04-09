@@ -254,17 +254,19 @@ async function searchGlobalFood() {
             const fat = f.foodNutrients.find(n => n.nutrientId === 1004)?.value || 0;
             const carb = f.foodNutrients.find(n => n.nutrientId === 1005)?.value || 0;
             
-            // Calculate grade for search result
-            const { grade, flags } = calculateMealGrade({
+            const basicItem = {
                 name: f.description,
-                calories: kcal,
-                protein: pro,
-                fat: fat,
-                carbs: carb,
+                calories: Math.round(kcal),
+                protein: Math.round(pro),
+                fat: Math.round(fat),
+                carbs: Math.round(carb),
                 fiber: f.foodNutrients.find(n => n.nutrientId === 1079 || n.nutrientId === 1082 || n.nutrientId === 1084)?.value || 0,
                 sugars: f.foodNutrients.find(n => n.nutrientId === 2000 || n.nutrientId === 2001)?.value || 0,
                 saturated_fat: f.foodNutrients.find(n => n.nutrientId === 1258)?.value || (fat * 0.3)
-            });
+            };
+
+            // Calculate grade for search result
+            const { grade, flags } = calculateMealGrade(basicItem);
 
             const flagsHtml = (flags || []).map(fl => `
                 <div class="grade-reason-badge type-${fl.type}" 
@@ -275,24 +277,49 @@ async function searchGlobalFood() {
                 </div>
             `).join('');
 
+            const isSelected = selectedItems.find(i => i.name === f.description);
+            const servings = isSelected ? isSelected.servings : 1;
+            const servingSize = f.servingSize || (f.dataType === 'SR Legacy' || f.dataType === 'SR LEGACY' ? 100 : null);
+            const servingUnit = f.servingSizeUnit || (f.dataType === 'SR Legacy' || f.dataType === 'SR LEGACY' ? 'g' : '');
+            const servingInfo = servingSize ? `Ref: ${Math.round(servingSize * servings)}${servingUnit}` : '';
+
             return `
-            <div class="card result-item" onclick="logGlobalItemByFdcId(${f.fdcId}, '${f.description.replace(/'/g, "\\'")}')" style="cursor: pointer; padding: 15px; display: flex; flex-direction: column; gap: 10px; transition: transform 0.1s;">
+            <div class="card result-item menu-item ${isSelected ? 'selected' : ''}" 
+                 id="item-${f.description.replace(/\s+/g, '-').replace(/'/g, '')}" 
+                 onclick="toggleGlobalSearchItem(this, ${f.fdcId}, ${JSON.stringify(basicItem).replace(/"/g, '&quot;')})" 
+                 style="cursor: pointer; padding: 15px; display: flex; flex-direction: column; gap: 10px; transition: transform 0.1s; max-width: none; position: relative;">
                <div style="display: flex; justify-content: space-between; align-items: start;">
-                    <div style="flex: 1;">
+                    <div style="flex: 1; min-width: 0;">
                         <div style="display: flex; align-items: center; gap: 8px;">
-                            <div style="font-weight: 800; font-size: 0.95rem; color: var(--text-1);">${f.description}</div>
+                            <div style="font-weight: 800; font-size: 0.95rem; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${f.description}</div>
                             <div class="item-gpa-badge grade-${grade[0]}">${grade}</div>
                         </div>
-                        <div style="font-size: 0.7rem; color: var(--text-3); text-transform: uppercase; margin-bottom: 8px;">${f.brandName || f.dataType || 'Common Food'}</div>
+                        <div style="font-size: 0.7rem; color: var(--text-3); text-transform: uppercase; margin-bottom: 8px;">
+                            ${f.brandName || f.dataType || 'Common Food'}
+                        </div>
                         <div style="display: flex; gap: 12px; font-size: 0.75rem; font-weight: 700; color: var(--text-2);">
                             <span><strong style="color:var(--primary)">${Math.round(pro)}g</strong> P</span>
                             <span><strong style="color:var(--primary)">${Math.round(carb)}g</strong> C</span>
                             <span><strong style="color:var(--primary)">${Math.round(fat)}g</strong> F</span>
                         </div>
                     </div>
-                    <div style="text-align: right; border-left: 1px solid var(--border); padding-left: 15px; margin-left: 15px;">
-                        <div style="font-weight: 900; color: var(--primary); font-size: 1.4rem; line-height: 1;">${Math.round(kcal)}</div>
-                        <div style="font-size: 0.6rem; color: var(--text-3); font-weight: 800; letter-spacing: 0.05em;">CALORIES</div>
+                    <div style="text-align: right; border-left: 1px solid var(--border); padding-left: 15px; margin-left: 15px; min-width: 100px; display: flex; flex-direction: column; align-items: flex-end;">
+                        <div class="item-cal-display" style="font-weight: 900; color: var(--primary); font-size: 1.4rem; line-height: 1;" data-base-cal="${Math.round(kcal)}">${Math.round(kcal * servings)}</div>
+                        <div style="font-size: 0.6rem; color: var(--text-3); font-weight: 800; letter-spacing: 0.05em; margin-bottom: 4px;">CALORIES</div>
+                        <div class="item-serving-ref" style="font-size: 0.65rem; color: var(--primary); font-weight: 950; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.02em;" data-base-val="${servingSize || 0}" data-unit="${servingUnit}">${servingInfo}</div>
+                        
+                        <div class="item-serving-controls" onclick="event.stopPropagation()" style="margin-top: 0; flex-direction: column; align-items: flex-end; gap: 6px; display: flex;">
+                            <div class="stepper" style="padding: 2px; gap: 8px;">
+                                <button class="step-btn" style="width: 24px; height: 24px; font-size: 0.7rem;" onclick="changeServings('${f.description.replace(/'/g, "\\'")}', -1)">−</button>
+                                <input type="number" step="0.1" min="0.1" class="serving-val" style="font-size: 0.8rem; min-width: 18px;" value="${servings}" oninput="handleManualServingChange('${f.description.replace(/'/g, "\\'")}', this.value)">
+                                <button class="step-btn" style="width: 24px; height: 24px; font-size: 0.7rem;" onclick="changeServings('${f.description.replace(/'/g, "\\'")}', 1)">+</button>
+                            </div>
+                            <div class="increment-toggle" style="padding: 1px; gap: 1px;">
+                                <button class="inc-btn ${servingIncrement === 0.1 ? 'active' : ''}" style="padding: 1px 4px; font-size: 0.55rem; min-width: 22px;" onclick="setServingIncrement(0.1)">.1</button>
+                                <button class="inc-btn ${servingIncrement === 0.5 ? 'active' : ''}" style="padding: 1px 4px; font-size: 0.55rem; min-width: 22px;" onclick="setServingIncrement(0.5)">.5</button>
+                                <button class="inc-btn ${servingIncrement === 1.0 ? 'active' : ''}" style="padding: 1px 4px; font-size: 0.55rem; min-width: 22px;" onclick="setServingIncrement(1.0)">1</button>
+                            </div>
+                        </div>
                     </div>
                </div>
                <div style="display: flex; flex-wrap: wrap; gap: 6px;">
@@ -303,6 +330,58 @@ async function searchGlobalFood() {
     } catch (e) {
         loadingEl.style.display = 'none';
         toast('Search failed. Check connection.');
+    }
+}
+
+function toggleGlobalSearchItem(el, fdcId, basicItem) {
+    const isNowSelected = !el.classList.contains('selected');
+    
+    // Toggle optimistically (using basic info)
+    toggleItem(el, basicItem);
+
+    if (isNowSelected) {
+        // Background enrichment: fetch more nutrients and serving data
+        authFetch(`${API}/api/external/food/${fdcId}`).then(res => res.json()).then(data => {
+            const getVal = (id) => {
+                const n = data.foodNutrients.find(x => x.nutrient.id === id || x.nutrientId === id);
+                return n ? (n.amount || n.value) : 0;
+            };
+
+            const fullItem = {
+                ...basicItem,
+                sodium: Math.round(getVal(1093)),
+                fiber: Math.round(getVal(1079)),
+                sugars: Math.round(getVal(1011) || getVal(2000)),
+                saturated_fat: Math.round(getVal(1258)),
+                trans_fat: Math.round(getVal(1257)),
+                cholesterol: Math.round(getVal(1253))
+            };
+
+            // Enhanced serving info if available
+            const measure = (data.foodMeasures && data.foodMeasures.length) ? data.foodMeasures[0] : null;
+            if (measure) {
+                const amount = parseFloat(measure.amount);
+                const unit = measure.disseminationText || measure.modifier || '';
+                const currentServings = selectedItems[idx]?.servings || 1;
+                
+                const refEl = el.querySelector('.item-serving-ref');
+                if (refEl) {
+                    refEl.setAttribute('data-base-val', amount);
+                    refEl.setAttribute('data-unit', unit);
+                    refEl.textContent = `Ref: ${Math.round(amount * currentServings)}${unit}`;
+                }
+                fullItem.serving_unit = unit;
+            }
+
+            const idx = selectedItems.findIndex(i => i.name === basicItem.name);
+            if (idx >= 0) {
+                const currentServings = selectedItems[idx].servings;
+                selectedItems[idx] = { ...selectedItems[idx], ...fullItem, servings: currentServings };
+                updateLogBar();
+            }
+        }).catch(err => {
+            console.warn("Background fetch failed", err);
+        });
     }
 }
 
@@ -1698,8 +1777,9 @@ function renderItem(item, isSpotlight) {
         }
     }
 
+    const safeId = item.name.replace(/\s+/g, '-').replace(/'/g, '');
     return `
-    <div class="menu-item ${isSelected ? 'selected' : ''} ${spotlightClass}" id="item-${item.name.replace(/\s+/g, '-')}" onclick="toggleItem(this, ${JSON.stringify(item).replace(/"/g, '&quot;')})">
+    <div class="menu-item ${isSelected ? 'selected' : ''} ${spotlightClass}" id="item-${safeId}" onclick="toggleItem(this, ${JSON.stringify(item).replace(/"/g, '&quot;')})">
         ${spotlightBadge}
         <div style="display: flex; align-items: flex-start; gap: 10px;">
             <div class="item-name">${item.name}</div>
@@ -1708,7 +1788,7 @@ function renderItem(item, isSpotlight) {
         <div class="item-badges">
             ${(item.badges || []).map(b => `<span class="badge badge-${b}">${b}</span>`).join('')}
         </div>
-        <div class="item-cal">${item.calories} cal</div>
+        <div class="item-cal-display" data-base-cal="${item.calories}">${Math.round(item.calories * servings)} cal</div>
         <div class="item-macros-preview">
             <span class="item-macro">P <strong>${item.protein || 0}g</strong></span>
             <span class="item-macro">F <strong>${item.fat || 0}g</strong></span>
@@ -1718,7 +1798,7 @@ function renderItem(item, isSpotlight) {
         <div class="item-serving-controls" onclick="event.stopPropagation()">
             <div class="stepper">
                 <button class="step-btn" onclick="changeServings('${item.name.replace(/'/g, "\\'")}', -1)">−</button>
-                <span class="serving-val">${servings}</span>
+                <input type="number" step="0.1" min="0.1" class="serving-val" value="${servings}" oninput="handleManualServingChange('${item.name.replace(/'/g, "\\'")}', this.value)">
                 <button class="step-btn" onclick="changeServings('${item.name.replace(/'/g, "\\'")}', 1)">+</button>
             </div>
             <div class="increment-toggle">
@@ -1775,13 +1855,43 @@ function changeServings(name, sign) {
     if (idx < 0) return; // Item not selected
 
     const delta = sign * servingIncrement;
-    selectedItems[idx].servings = Math.max(0.1, parseFloat((selectedItems[idx].servings + delta).toFixed(1)));
+    const newVal = Math.max(0.1, parseFloat((selectedItems[idx].servings + delta).toFixed(1)));
+    updateServingState(idx, name, newVal);
+}
 
-    // Update UI for the specific item
-    const itemEl = document.getElementById(`item-${name.replace(/\s+/g, '-')}`);
+function handleManualServingChange(name, value) {
+    const idx = selectedItems.findIndex(i => i.name === name);
+    if (idx < 0) return;
+    const newVal = parseFloat(value);
+    if (isNaN(newVal) || newVal < 0.1) return;
+    updateServingState(idx, name, newVal);
+}
+
+function updateServingState(idx, name, newVal) {
+    selectedItems[idx].servings = newVal;
+
+    const safeId = name.replace(/\s+/g, '-').replace(/'/g, '');
+    const itemEl = document.getElementById(`item-${safeId}`);
     if (itemEl) {
         const valEl = itemEl.querySelector('.serving-val');
-        if (valEl) valEl.textContent = selectedItems[idx].servings;
+        if (valEl) valEl.value = newVal;
+
+        const calDisplay = itemEl.querySelector('.item-cal-display');
+        if (calDisplay) {
+            const base = parseFloat(calDisplay.getAttribute('data-base-cal'));
+            if (!isNaN(base)) {
+                calDisplay.textContent = Math.round(base * newVal) + (calDisplay.textContent.includes('cal') ? ' cal' : '');
+            }
+        }
+
+        const refDisplay = itemEl.querySelector('.item-serving-ref');
+        if (refDisplay) {
+            const baseVal = parseFloat(refDisplay.getAttribute('data-base-val'));
+            const unit = refDisplay.getAttribute('data-unit');
+            if (baseVal && !isNaN(baseVal) && baseVal > 0) {
+                refDisplay.textContent = `Ref: ${Math.round(baseVal * newVal)}${unit}`;
+            }
+        }
     }
 
     updateLogBar();

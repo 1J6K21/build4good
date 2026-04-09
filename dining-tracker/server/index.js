@@ -31,12 +31,8 @@ const { prescrapeAll, schedulePrescrape } = require('./cron-prescrape');
 // This ensures that if you deploy at 10:00 AM, the server fetches "today" 
 // in the background right now instead of waiting until 5 AM tomorrow.
 // We skip this in development to keep the terminal clean and startup fast.
-if (process.env.NODE_ENV === 'production' || process.env.FLY_APP_NAME) {
-    setTimeout(() => {
-        console.log('[Startup] Executing background pre-scrape check...');
-        prescrapeAll().catch(e => console.error('[Startup] Pre-scrape error:', e));
-    }, 10_000); // Wait 10s for the server to be fully hot
-}
+// Background pre-scrape check is now triggered in app.listen callback to ensure
+// the server is fully reachable before resource-intensive tasks start.
 
 schedulePrescrape();
 
@@ -506,7 +502,17 @@ app.use((req, res) => {
 });
 
 // ── START ──────────────────────────────────────────
-const PORT = process.env.PORT || 3333;
+const PORT = parseInt(process.env.PORT || '3333', 10);
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🍽️  MindfulMacros (Auth-Enabled)\n   Running on port ${PORT}`);
+
+    // TRIGGER BACKGROUND PRE-SCRAPE (PROD ONLY):
+    // We wait 15s after listening starts so that Fly.io health checks can pass
+    // before Puppeteer starts consuming resources.
+    if (process.env.NODE_ENV === 'production' || process.env.FLY_APP_NAME) {
+        setTimeout(() => {
+            console.log('[Startup] Executing background pre-scrape check...');
+            prescrapeAll().catch(e => console.error('[Startup] Pre-scrape error:', e));
+        }, 15_000);
+    }
 });

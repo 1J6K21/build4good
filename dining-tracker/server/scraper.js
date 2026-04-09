@@ -338,11 +338,40 @@ async function scrapeMenu(locationSlug, periodSlug, date, onStep = () => { }) {
         const apiUrl = `https://api.dineoncampus.com/v1/location/menu?site_id=${siteId}&location_id=${loc.id}&period_id=${per.id}&date=${date}`;
         console.log(`[Scraper] API URL: ${apiUrl}`);
         try {
+            const apiHeaders = {
+                'User-Agent': userAgent,
+                'Accept': 'application/json, text/plain, */*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Referer': 'https://dineoncampus.com/',
+                'Origin': 'https://dineoncampus.com',
+                'Connection': 'keep-alive',
+                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-site',
+                'Sec-Ch-Ua': '"Google Chrome";v="123", "Not:A-Brand";v="8", "Chromium";v="123"',
+                'Sec-Ch-Ua-Mobile': '?0',
+                'Sec-Ch-Ua-Platform': '"macOS"'
+            };
+
             const apiRes = await fetch(apiUrl, {
-                headers: { 'User-Agent': userAgent, 'Accept': 'application/json' },
+                headers: apiHeaders,
                 timeout: 10000
             });
-            console.log(`[Scraper] API Response Status: ${apiRes.status}`);
+            console.log(`[Scraper] API v1 Response Status: ${apiRes.status}`);
+            
+            if (apiRes.status === 403) {
+              console.log('[Scraper] v1 API blocked (403). Trying v4 API endpoint...');
+              const v4Url = `https://api.dineoncampus.com/v4/location/menu?site_id=${siteId}&location_id=${loc.id}&period_id=${per.id}&date=${date}`;
+              const v4Res = await fetch(v4Url, { headers: apiHeaders, timeout: 10000 });
+              console.log(`[Scraper] API v4 Response Status: ${v4Res.status}`);
+              if (v4Res.ok) {
+                const data = await v4Res.json();
+                const result = processMenuJson(data);
+                if (result?.length > 0) return result;
+              }
+            }
+
             if (apiRes.ok) {
                 const data = await apiRes.json();
                 console.log(`[Scraper] API JSON data received (keys: ${Object.keys(data).join(', ')})`);

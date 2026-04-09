@@ -10,7 +10,7 @@ const fixTable = (table, columns) => {
             db.prepare(`ALTER TABLE ${table} ADD COLUMN ${col} INTEGER DEFAULT 0`).run();
             console.log(`[DB Fix] Added ${col} to ${table}`);
         } catch (e) {
-            // Probably already exists
+            // Already exists
         }
     }
 }

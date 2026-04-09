@@ -3,18 +3,12 @@ const path = require('path');
 const cheerio = require('cheerio');
 
 function parseSavedHtml() {
-  const savedPath = path.join(__dirname, '../../helper/Dine On Campus.html');
+  const savedPath = path.join(__dirname, '../helper/Dine On Campus.html');
 
   if (fs.existsSync(savedPath)) {
     const html = fs.readFileSync(savedPath, 'utf-8');
     const $ = cheerio.load(html);
     const stations = [];
-
-    // Find each station category block
-    $('[aria-label]').each((i, el) => {
-        const label = ($(el).attr('aria-label') || '').toLowerCase();
-        // console.log("Checking aria-label:", label);
-    });
 
     $('[aria-label]').filter((i, el) => {
       const label = ($(el).attr('aria-label') || '').toLowerCase();
@@ -23,7 +17,6 @@ function parseSavedHtml() {
       const label = $(stationEl).attr('aria-label') || '';
       const stationName = label.replace(/toggle /i, '').replace(/ category/i, '').trim();
 
-      // Find the table after this button or within the same container
       const container = $(stationEl).closest('.p-4');
       const table = container.find('table').first();
       const items = [];

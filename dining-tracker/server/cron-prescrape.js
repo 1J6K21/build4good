@@ -118,7 +118,7 @@ async function prescrapeAll() {
             const status = await triggerScrape(loc, period, date);
             if (status === 'ready') {
                 // Cache hit — already in DB from a previous run
-                console.log(`[cron] ✅ Already cached — skipping poll.`);
+                console.log(`[cron] ✅ Already cached.`);
                 passed++;
             } else {
                 wasScraped = true;
@@ -127,15 +127,15 @@ async function prescrapeAll() {
                 else { console.log(`[cron] ❌ Failed or timed out.`); failed++; }
             }
         } catch (e) {
-            console.error(`[cron] ❌ Error: ${e.message}`);
+            console.error(`[cron] ❌ Error triggering/waiting: ${e.message}`);
             failed++;
         }
 
-        // Stagger scrape starts ONLY IF we actually scraped, to be polite to dineoncampus.com
-        // and only if this isn't the very last job.
-        if (wasScraped && i < jobs.length - 1) {
-            console.log(`[cron] ⏳ Staggering ${STAGGER_MS / 1000}s before next job...`);
-            await sleep(STAGGER_MS);
+        // ALWAYS stagger between jobs to avoid hammering resources
+        if (i < jobs.length - 1) {
+            const delay = wasScraped ? STAGGER_MS : 3000;
+            console.log(`[cron] ⏳ Staggering ${delay / 1000}s before next job...`);
+            await sleep(delay);
         }
     }
 
