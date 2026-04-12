@@ -12,6 +12,52 @@ if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
 const db = new Database(DB_PATH);
 
+/**
+ * DB MIGRATION: V2 (Goal-Offset Update)
+ * This runs on boot to ensure the SQLite volume is upgraded before the server starts.
+ */
+try {
+  const columns = db.prepare("PRAGMA table_info(users)").all();
+  const hasMajor = columns.some(c => c.name === 'major');
+  const hasGoal = columns.some(c => c.name === 'goal');
+  
+  if (hasMajor || !hasGoal) {
+      console.log('[DB] upgrading users table schema to v2...');
+      db.pragma('foreign_keys = OFF');
+      db.transaction(() => {
+          db.prepare(`
+              CREATE TABLE users_new (
+                  id TEXT PRIMARY KEY,
+                  email TEXT UNIQUE NOT NULL,
+                  name TEXT,
+                  picture TEXT,
+                  calorie_goal INTEGER DEFAULT 2000,
+                  protein_goal INTEGER DEFAULT 100,
+                  fat_goal INTEGER DEFAULT 70,
+                  carb_goal INTEGER DEFAULT 250,
+                  height INTEGER,
+                  weight INTEGER,
+                  tracked_nutrients TEXT DEFAULT '[]',
+                  goal INTEGER DEFAULT 0,
+                  gpa REAL DEFAULT 4.0,
+                  created_at INTEGER
+              )
+          `).run();
+          const insertCols = "id, email, name, picture, calorie_goal, protein_goal, fat_goal, carb_goal, height, weight, tracked_nutrients, gpa, created_at";
+          db.prepare(`
+              INSERT INTO users_new (${insertCols}, goal)
+              SELECT ${insertCols}, 0 FROM users
+          `).run();
+          db.prepare("DROP TABLE users").run();
+          db.prepare("ALTER TABLE users_new RENAME TO users").run();
+      })();
+      db.pragma('foreign_keys = ON');
+      console.log('[DB] users table schema upgraded successfully.');
+  }
+} catch (e) {
+    console.error('[DB] Failed to upgrade users table:', e);
+}
+
 // Create tables
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (

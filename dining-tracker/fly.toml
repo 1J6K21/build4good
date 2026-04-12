@@ -8,10 +8,6 @@ primary_region = "ord"              # Chicago — High capacity for 1GB machines
 [build]
   dockerfile = "Dockerfile"
 
-[deploy]
-  # Runs once before every deploy to ensure the DB schema matches the code
-  release_command = "node scripts/migrate-v2.js"
-
 [env]
   NODE_ENV   = "production"
   PORT       = "3333"
