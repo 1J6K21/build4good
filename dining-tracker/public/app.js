@@ -505,15 +505,19 @@ async function logGlobalItemByFdcId(fdcId, fName) {
 
 function getMaintenanceCalories() {
     if (!currentUser) return 2000;
-    
+    return getMaintenanceCaloriesForUser(currentUser);
+}
+
+function getMaintenanceCaloriesForUser(user) {
+    if (!user) return 2000;
     // Check if we have enough info
-    if (!currentUser.weight || !currentUser.height) {
-        return parseInt(currentUser.calorie_goal) || 2000;
+    if (!user.weight || !user.height) {
+        return parseInt(user.calorie_goal) || 2000;
     }
 
-    const weightLbs = parseFloat(currentUser.weight);
-    const heightIn = parseFloat(currentUser.height);
-    if (isNaN(weightLbs) || isNaN(heightIn)) return parseInt(currentUser.calorie_goal) || 2000;
+    const weightLbs = parseFloat(user.weight);
+    const heightIn = parseFloat(user.height);
+    if (isNaN(weightLbs) || isNaN(heightIn)) return parseInt(user.calorie_goal) || 2000;
 
     const wKg = weightLbs * 0.453592;
     const hCm = heightIn * 2.54;
@@ -522,9 +526,17 @@ function getMaintenanceCalories() {
     // Check localStorage for activity level first (synced in saveGoals)
     const storedActivity = localStorage.getItem('userActivity');
     const activityLvl = storedActivity ? parseFloat(storedActivity) : 1.55; 
-
+    
     const bmr = (10 * wKg) + (6.25 * hCm) - (5 * age) + 5;
     return Math.round(bmr * activityLvl);
+}
+
+function getUserMajor(user = currentUser) {
+    if (!user) return 'Maintenance';
+    const goalOffset = parseInt(user.goal) || 0;
+    if (goalOffset > 0) return 'Bulking';
+    if (goalOffset < 0) return 'Cutting';
+    return 'Maintenance';
 }
 
 // ── Dashboard ─────────────────────────────
@@ -744,13 +756,13 @@ async function refreshDashboard() {
 function updateHealthGPA(todayLogs, historicalLogs) {
     if (!currentUser) return;
     
-    document.getElementById('gpaMajorDisplay').textContent = `Major: ${currentUser.major || 'Cutting'}`;
+    document.getElementById('gpaMajorDisplay').textContent = `Major: ${getUserMajor()}`;
     
     // 1. Calculate TRUE Overall GPA (30-day average)
     let hPoints = 0;
     let hWeight = 0;
     historicalLogs.forEach(l => {
-        const { points, isExam } = calculateMealGrade(l, currentUser.major, l.logged_at);
+        const { points, isExam } = calculateMealGrade(l, getUserMajor(), l.logged_at);
         const w = isExam ? 3 : 1;
         hPoints += (points * w);
         hWeight += w;
@@ -773,7 +785,7 @@ function updateHealthGPA(todayLogs, historicalLogs) {
     let timingPenalty = 0;
     
     todayLogs.forEach(l => {
-        const { points, isExam } = calculateMealGrade(l, currentUser.major, l.logged_at);
+        const { points, isExam } = calculateMealGrade(l, getUserMajor(), l.logged_at);
         const w = isExam ? 3 : 1;
         tPoints += (points * w);
         tWeight += w;
@@ -1630,7 +1642,7 @@ function scoreFoodItem(item) {
 
     // 0. SANITIZE INPUTS (Fixes the rendering crash)
     const name = (item.item_name || item.name || '').toLowerCase();
-    const major = (currentUser?.major || 'General Health').toLowerCase();
+    const major = getUserMajor(currentUser).toLowerCase();
 
     // 0. SANITIZE INPUTS & MAJOR-AWARE SCALING
     const pro = parseFloat(item.protein || item.p) || 0;
@@ -1841,7 +1853,7 @@ function renderItem(item, isSpotlight) {
     let spotlightBadge = '';
     
     // Calculate grade for display
-    const { grade, isExam } = calculateMealGrade(item, (currentUser ? currentUser.major : 'Cutting'));
+    const { grade, isExam } = calculateMealGrade(item, getUserMajor());
 
     if (isSpotlight) {
         if (item._type === 'meal-top') {
@@ -2440,7 +2452,11 @@ function openGoalsModal() {
     document.getElementById('userWeight').value = currentUser.weight || '';
     
     const savedActivity = localStorage.getItem('userActivity') || '1.55';
-    const savedGoal = localStorage.getItem('userGoal') || '0';
+    // Priority: DB Goal > LocalStorage Goal > Default 0
+    let savedGoal = (currentUser.goal !== undefined && currentUser.goal !== null) 
+        ? currentUser.goal.toString() 
+        : (localStorage.getItem('userGoal') || '0');
+
     if(document.getElementById('userActivity')) document.getElementById('userActivity').value = savedActivity;
     if(document.getElementById('userGoal')) document.getElementById('userGoal').value = savedGoal;
     
@@ -2459,7 +2475,8 @@ async function saveGoals() {
         fatGoal: document.getElementById('goalFatInput').value,
         carbGoal: document.getElementById('goalCarbInput').value,
         height: document.getElementById('userHeight').value,
-        weight: document.getElementById('userWeight').value
+        weight: document.getElementById('userWeight').value,
+        goal: document.getElementById('userGoal').value
     };
 
     const res = await authFetch(`${API}/api/user/goals`, {
@@ -2479,6 +2496,7 @@ async function saveGoals() {
         currentUser.protein_goal = parseInt(goals.proteinGoal);
         currentUser.fat_goal = parseInt(goals.fatGoal);
         currentUser.carb_goal = parseInt(goals.carbGoal);
+        currentUser.goal = parseInt(goals.goal);
         if (goals.height) currentUser.height = parseInt(goals.height);
         if (goals.weight) currentUser.weight = parseInt(goals.weight);
         refreshDashboard();
@@ -4469,7 +4487,7 @@ async function openReportCardModal(forcedLogs = null, forcedRangeStr = null, isS
     
     // 1. Basic Info
     document.getElementById('reportUserName').textContent = (currentUser.name || 'STUDENT').toUpperCase();
-    document.getElementById('reportMajor').textContent = (currentUser.major || 'GENERAL HEALTH').toUpperCase();
+    document.getElementById('reportMajor').textContent = getUserMajor().toUpperCase();
     
     // 2. Date Range
     if (forcedRangeStr) {
@@ -4497,7 +4515,7 @@ async function openReportCardModal(forcedLogs = null, forcedRangeStr = null, isS
     let timingPenalty = 0;
     
     const gradedLogs = logs.map(l => {
-        const { grade, points, isExam, examType } = calculateMealGrade(l, currentUser.major, l.logged_at);
+        const { grade, points, isExam, examType } = calculateMealGrade(l, getUserMajor(), l.logged_at);
         const weight = isExam ? 3 : 1;
         totalPoints += (points * weight);
         totalWeight += weight;
@@ -4681,7 +4699,7 @@ function getGradeColor(grade) {
 
 function generatePersonalReflection(gpa, timingPenalty, produceCount) {
     if (gpa >= 3.7) {
-        return `"My consistency has been a major highlight this period. By prioritizing high-protein and nutrient-dense options, I've managed to stay well within my target zones while fueling effectively for my ${(currentUser.major || 'health').toLowerCase()} goals. The extra credit produce swaps are paying off."`;
+        return `"My consistency has been a major highlight this period. By prioritizing high-protein and nutrient-dense options, I've managed to stay well within my target zones while fueling effectively for my ${getUserMajor().toLowerCase()} goals. The extra credit produce swaps are paying off."`;
     } else if (gpa >= 3.0) {
         let msg = `"I'm generally on the right track, but slight deviations in `;
         if (timingPenalty > 0) msg += 'meal timing and late-night intake ';
@@ -4689,7 +4707,7 @@ function generatePersonalReflection(gpa, timingPenalty, produceCount) {
         msg += `are capping my performance potential. A few more smart swaps and tighter consistency in the afternoon will be key to reaching Dean's List status."`;
         return msg;
     } else {
-        return `"This has been a challenging week for my nutritional habits. My ledger shows several entries that don't align with my ${(currentUser.major || 'health').toLowerCase()} major. I need to focus on logging higher quality whole foods and reducing late-night calorie spikes to recover my GPA."`;
+        return `"This has been a challenging week for my nutritional habits. My ledger shows several entries that don't align with my ${getUserMajor().toLowerCase()} major. I need to focus on logging higher quality whole foods and reducing late-night calorie spikes to recover my GPA."`;
     }
 }
 

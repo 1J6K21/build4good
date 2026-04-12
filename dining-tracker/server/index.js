@@ -9,7 +9,7 @@ const {
     addMealLog, getMealLogs, getMealLogsRange, deleteMealLog,
     getMenu, createScrapeJob, getScrapeJob, getAllLocations,
     cleanupMenus, getShortcuts, saveShortcut, updateMacroGoals,
-    updateUserStats, updateTrackedNutrients, updateUserNutrients, updateUserGoals,
+    updateUserStats, updateTrackedNutrients, updateUserNutrients, updateUserGoals, updateUserGoal,
     addWaitTime, getWaitTimeStats, getWaitTimeStatsAll, clearStaleJobs,
     updateExperimentStatus, getExperimentLogs, addExperimentLog, deleteExperiment,
     deleteExperimentLog, getExperiments, createExperiment,
@@ -17,31 +17,11 @@ const {
     getSavedScenarios, createSavedScenario, deleteSavedScenario
 } = require('./db');
 
-// Run DB cleanup on startup
-cleanupMenus(30);
-// Schedule cleanup once per day
-setInterval(() => cleanupMenus(30), 24 * 60 * 60 * 1000);
+// DB cleanup moved to post-startup deferral to speed up cold starts
 
-const { startScrapeProcess } = require('./scraper');
+// Pre-scraper moved to post-startup deferral
 
-// Start the 05:00 AM daily pre-scraper scheduler
-const { prescrapeAll, schedulePrescrape } = require('./cron-prescrape');
-
-// TRIGGER ON STARTUP (PROD ONLY):
-// This ensures that if you deploy at 10:00 AM, the server fetches "today" 
-// in the background right now instead of waiting until 5 AM tomorrow.
-// We skip this in development to keep the terminal clean and startup fast.
-// Background pre-scrape check is now triggered in app.listen callback to ensure
-// the server is fully reachable before resource-intensive tasks start.
-
-schedulePrescrape();
-
-// --- STARTUP CLEANUP ---
-// Clear any "scraping" jobs that were orphaned when the server last stopped/crashed.
-const staleDeleted = clearStaleJobs();
-if (staleDeleted > 0) {
-    console.log(`[DB] Cleared ${staleDeleted} stale scrape jobs from previous session.`);
-}
+// Startup cleanup moved to post-startup deferral
 
 const fs = require('fs');
 
@@ -198,10 +178,11 @@ app.post('/api/user/shortcuts', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/user/goals', authenticateToken, async (req, res) => {
-    const { calorieGoal, proteinGoal, fatGoal, carbGoal, height, weight } = req.body;
+    const { calorieGoal, proteinGoal, fatGoal, carbGoal, height, weight, goal } = req.body;
     if (calorieGoal) await updateCalorieGoal(req.user.id, parseInt(calorieGoal));
     await updateUserGoals(req.user.id, parseInt(proteinGoal), parseInt(fatGoal), parseInt(carbGoal));
     if (height || weight) await updateUserStats(req.user.id, height ? parseInt(height) : null, weight ? parseInt(weight) : null);
+    if (goal !== undefined) await updateUserGoal(req.user.id, parseInt(goal));
     res.json({ success: true });
 });
 
@@ -463,6 +444,8 @@ app.get('/api/menu', async (req, res) => {
 
     console.log(`[API] Starting NEW scrape job for ${locationSlug}`);
     createScrapeJob(locationSlug, periodSlug, date);
+    // Lazy-load the scraper engine only when a scrape is actually requested
+    const { startScrapeProcess } = require('./scraper');
     startScrapeProcess(locationSlug, periodSlug, date);
     res.json({ status: 'scraping', step: 'Initializing...' });
 });
@@ -506,13 +489,28 @@ const PORT = parseInt(process.env.PORT || '3333', 10);
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🍽️  MindfulMacros (Auth-Enabled)\n   Running on port ${PORT}`);
 
-    // TRIGGER BACKGROUND PRE-SCRAPE (PROD ONLY):
-    // We wait 15s after listening starts so that Fly.io health checks can pass
-    // before Puppeteer starts consuming resources.
-    if (process.env.NODE_ENV === 'production' || process.env.FLY_APP_NAME) {
-        setTimeout(() => {
+    // DEFERRED STARTUP TASKS
+    // Running these after 'listen' ensures the user gets a response 
+    // to their first request immediately, rather than waiting for boot-up chores.
+    setTimeout(() => {
+        console.log('[Startup] Executing deferred maintenance tasks...');
+        
+        // 1. Clear stale jobs from last time
+        const staleDeleted = clearStaleJobs();
+        if (staleDeleted > 0) console.log(`[DB] Cleared ${staleDeleted} stale jobs.`);
+
+        // 2. Run DB cleanup
+        cleanupMenus(30);
+        setInterval(() => cleanupMenus(30), 24 * 60 * 60 * 1000);
+
+        // 3. Setup Pre-Scraper
+        const { prescrapeAll, schedulePrescrape } = require('./cron-prescrape');
+        schedulePrescrape();
+
+        // 4. Trigger initial pre-scrape if in PROD
+        if (process.env.NODE_ENV === 'production' || process.env.FLY_APP_NAME) {
             console.log('[Startup] Executing background pre-scrape check...');
             prescrapeAll().catch(e => console.error('[Startup] Pre-scrape error:', e));
-        }, 15_000);
-    }
+        }
+    }, 5000); // 5s delay gives priority to initial user traffic
 });

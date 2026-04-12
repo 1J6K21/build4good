@@ -26,7 +26,7 @@ db.exec(`
     height INTEGER,
     weight INTEGER,
     tracked_nutrients TEXT DEFAULT '[]',
-    major TEXT DEFAULT 'Cutting',
+    goal INTEGER DEFAULT 0,
     gpa REAL DEFAULT 4.0,
     created_at INTEGER
   );
@@ -121,11 +121,6 @@ db.exec(`
     FOREIGN KEY(user_id) REFERENCES users(id)
   );
 `);
-
-// Migration: Add step column if it doesn't exist (handle existing DBs)
-try {
-  db.prepare("ALTER TABLE scrape_jobs ADD COLUMN step TEXT").run();
-} catch (e) { }
 
 try {
   db.prepare("ALTER TABLE meal_logs ADD COLUMN protein INTEGER DEFAULT 0").run();
@@ -318,6 +313,11 @@ async function upsertUser({ id, email, name, picture }) {
 function updateUserGoals(userId, pro, fat, carb) {
   db.prepare('UPDATE users SET protein_goal = ?, fat_goal = ?, carb_goal = ? WHERE id = ?').run(pro, fat, carb, userId);
 }
+
+function updateUserGoal(userId, goal) {
+  db.prepare('UPDATE users SET goal = ? WHERE id = ?').run(goal, userId);
+}
+
 
 function updateUserNutrients(userId, nutrientsJSON) {
   db.prepare('UPDATE users SET tracked_nutrients = ? WHERE id = ?').run(nutrientsJSON, userId);
@@ -711,6 +711,7 @@ module.exports = {
   upsertUser,
   updateCalorieGoal,
   updateUserGoals,
+  updateUserGoal,
   updateUserNutrients,
   updateUserStats,
   updateTrackedNutrients,

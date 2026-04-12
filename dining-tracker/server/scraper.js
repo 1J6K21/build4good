@@ -1,8 +1,5 @@
-const puppeteer = require('puppeteer-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-const cheerio = require('cheerio');
-
-puppeteer.use(StealthPlugin());
+// Heavy dependencies are now lazy-loaded inside createBrowser and parseMenuHtml
+// to ensure the server boots instantly.
 
 // ── Proxy Rotation ──────────────────────────────────────────────────────────
 // Populate PROXY_LIST env var with comma-separated proxy URLs to enable rotation.
@@ -146,6 +143,7 @@ function processMenuJson(json) {
 }
 
 function parseMenuHtml(html) {
+  const cheerio = require('cheerio');
   const $ = cheerio.load(html);
   const stations = [];
 
@@ -240,6 +238,14 @@ function parseMenuHtml(html) {
 // Each scrape job creates a fresh browser (optionally with a random proxy)
 // so the proxy actually rotates between jobs.
 async function createBrowser(proxy) {
+  const puppeteer = require('puppeteer-extra');
+  const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+  
+  // Only register once
+  if (puppeteer.plugins.length === 0) {
+    puppeteer.use(StealthPlugin());
+  }
+
   const args = [
     '--no-sandbox',
     '--disable-setuid-sandbox',
