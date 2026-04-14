@@ -168,94 +168,98 @@ db.exec(`
   );
 `);
 
-try {
-  db.prepare("ALTER TABLE meal_logs ADD COLUMN protein INTEGER DEFAULT 0").run();
-} catch (e) { }
-try {
-  db.prepare("ALTER TABLE meal_logs ADD COLUMN fat INTEGER DEFAULT 0").run();
-} catch (e) { }
-try {
-  db.prepare("ALTER TABLE meal_logs ADD COLUMN carbs INTEGER DEFAULT 0").run();
-} catch (e) { }
-try {
-  db.prepare("ALTER TABLE meal_logs ADD COLUMN sodium INTEGER DEFAULT 0").run();
-} catch (e) { }
-try {
-  db.prepare("ALTER TABLE meal_logs ADD COLUMN fiber INTEGER DEFAULT 0").run();
-} catch (e) { }
-try {
-  db.prepare("ALTER TABLE meal_logs ADD COLUMN sugar INTEGER DEFAULT 0").run();
-} catch (e) { }
-try {
-  db.prepare("ALTER TABLE meal_logs ADD COLUMN sugars INTEGER DEFAULT 0").run();
-} catch (e) { }
-try {
-  db.prepare("ALTER TABLE meal_logs ADD COLUMN saturated_fat INTEGER DEFAULT 0").run();
-} catch (e) { }
-try {
-  db.prepare("ALTER TABLE meal_logs ADD COLUMN trans_fat INTEGER DEFAULT 0").run();
-} catch (e) { }
-try {
-  db.prepare("ALTER TABLE meal_logs ADD COLUMN cholesterol INTEGER DEFAULT 0").run();
-} catch (e) { }
+function runMigrations() {
+  console.log('[DB] Checking migrations...');
+  try {
+    db.prepare("ALTER TABLE meal_logs ADD COLUMN protein INTEGER DEFAULT 0").run();
+  } catch (e) { }
+  try {
+    db.prepare("ALTER TABLE meal_logs ADD COLUMN fat INTEGER DEFAULT 0").run();
+  } catch (e) { }
+  try {
+    db.prepare("ALTER TABLE meal_logs ADD COLUMN carbs INTEGER DEFAULT 0").run();
+  } catch (e) { }
+  try {
+    db.prepare("ALTER TABLE meal_logs ADD COLUMN sodium INTEGER DEFAULT 0").run();
+  } catch (e) { }
+  try {
+    db.prepare("ALTER TABLE meal_logs ADD COLUMN fiber INTEGER DEFAULT 0").run();
+  } catch (e) { }
+  try {
+    db.prepare("ALTER TABLE meal_logs ADD COLUMN sugar INTEGER DEFAULT 0").run();
+  } catch (e) { }
+  try {
+    db.prepare("ALTER TABLE meal_logs ADD COLUMN sugars INTEGER DEFAULT 0").run();
+  } catch (e) { }
+  try {
+    db.prepare("ALTER TABLE meal_logs ADD COLUMN saturated_fat INTEGER DEFAULT 0").run();
+  } catch (e) { }
+  try {
+    db.prepare("ALTER TABLE meal_logs ADD COLUMN trans_fat INTEGER DEFAULT 0").run();
+  } catch (e) { }
+  try {
+    db.prepare("ALTER TABLE meal_logs ADD COLUMN cholesterol INTEGER DEFAULT 0").run();
+  } catch (e) { }
 
-// Wait Times Migrations
-try {
-  db.prepare("ALTER TABLE wait_times ADD COLUMN station_name TEXT NOT NULL DEFAULT 'Unknown'").run();
-} catch (e) { }
+  // Wait Times Migrations
+  try {
+    db.prepare("ALTER TABLE wait_times ADD COLUMN station_name TEXT NOT NULL DEFAULT 'Unknown'").run();
+  } catch (e) { }
 
-// Experiments Support
-db.exec(`
-  CREATE TABLE IF NOT EXISTS experiments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id TEXT NOT NULL,
-    title TEXT NOT NULL,
-    duration_days INTEGER NOT NULL,
-    start_date TEXT NOT NULL,
-    status TEXT DEFAULT 'active'
-  );
+  // Experiments Support
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS experiments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      duration_days INTEGER NOT NULL,
+      start_date TEXT NOT NULL,
+      status TEXT DEFAULT 'active'
+    );
 
-  CREATE TABLE IF NOT EXISTS experiment_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    experiment_id INTEGER NOT NULL,
-    date TEXT NOT NULL,
-    weight REAL,
-    hunger_level INTEGER,
-    consistency INTEGER,
-    notes TEXT,
-    FOREIGN KEY(experiment_id) REFERENCES experiments(id)
-  );
-`);
+    CREATE TABLE IF NOT EXISTS experiment_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      experiment_id INTEGER NOT NULL,
+      date TEXT NOT NULL,
+      weight REAL,
+      hunger_level INTEGER,
+      consistency INTEGER,
+      notes TEXT,
+      FOREIGN KEY(experiment_id) REFERENCES experiments(id)
+    );
+  `);
 
-try {
-  db.prepare("ALTER TABLE experiment_logs ADD COLUMN auto_calories INTEGER").run();
-} catch (e) { }
-try {
-  db.prepare("ALTER TABLE food_items ADD COLUMN sodium INTEGER DEFAULT 0").run();
-} catch (e) { }
-try {
-  db.prepare("ALTER TABLE food_items ADD COLUMN fiber INTEGER DEFAULT 0").run();
-} catch (e) { }
-try {
-  db.prepare("ALTER TABLE food_items ADD COLUMN sugar INTEGER DEFAULT 0").run();
-} catch (e) { }
-try {
-  db.prepare("ALTER TABLE food_items ADD COLUMN sugars INTEGER DEFAULT 0").run();
-} catch (e) { }
-try {
-  db.prepare("ALTER TABLE food_items ADD COLUMN saturated_fat INTEGER DEFAULT 0").run();
-} catch (e) { }
-try {
-  db.prepare("ALTER TABLE food_items ADD COLUMN trans_fat INTEGER DEFAULT 0").run();
-} catch (e) { }
-try {
-  db.prepare("ALTER TABLE food_items ADD COLUMN cholesterol INTEGER DEFAULT 0").run();
-} catch (e) { }
+  try {
+    db.prepare("ALTER TABLE experiment_logs ADD COLUMN auto_calories INTEGER").run();
+  } catch (e) { }
+  try {
+    db.prepare("ALTER TABLE food_items ADD COLUMN sodium INTEGER DEFAULT 0").run();
+  } catch (e) { }
+  try {
+    db.prepare("ALTER TABLE food_items ADD COLUMN fiber INTEGER DEFAULT 0").run();
+  } catch (e) { }
+  try {
+    db.prepare("ALTER TABLE food_items ADD COLUMN sugar INTEGER DEFAULT 0").run();
+  } catch (e) { }
+  try {
+    db.prepare("ALTER TABLE food_items ADD COLUMN sugars INTEGER DEFAULT 0").run();
+  } catch (e) { }
+  try {
+    db.prepare("ALTER TABLE food_items ADD COLUMN saturated_fat INTEGER DEFAULT 0").run();
+  } catch (e) { }
+  try {
+    db.prepare("ALTER TABLE food_items ADD COLUMN trans_fat INTEGER DEFAULT 0").run();
+  } catch (e) { }
+  try {
+    db.prepare("ALTER TABLE food_items ADD COLUMN cholesterol INTEGER DEFAULT 0").run();
+  } catch (e) { }
 
-// Wait Times Migrations
-try {
-  db.prepare("ALTER TABLE wait_times ADD COLUMN station_name TEXT NOT NULL DEFAULT 'Unknown'").run();
-} catch (e) { }
+  // Wait Times Migrations
+  try {
+    db.prepare("ALTER TABLE wait_times ADD COLUMN station_name TEXT NOT NULL DEFAULT 'Unknown'").run();
+  } catch (e) { }
+  console.log('[DB] Migrations complete.');
+}
 
 
 function getMenu(locationSlug, periodSlug, date) {
@@ -789,5 +793,6 @@ module.exports = {
   getCalorieDebt,
   getSavedScenarios,
   createSavedScenario,
-  deleteSavedScenario
+  deleteSavedScenario,
+  runMigrations
 };

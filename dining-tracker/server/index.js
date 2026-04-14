@@ -14,7 +14,8 @@ const {
     updateExperimentStatus, getExperimentLogs, addExperimentLog, deleteExperiment,
     deleteExperimentLog, getExperiments, createExperiment,
     getLeaderboard, getTopItems, findDiningTwin, getCalorieDebt,
-    getSavedScenarios, createSavedScenario, deleteSavedScenario
+    getSavedScenarios, createSavedScenario, deleteSavedScenario,
+    runMigrations
 } = require('./db');
 
 // DB cleanup moved to post-startup deferral to speed up cold starts
@@ -53,7 +54,8 @@ const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key';
 
 // ── DEBUG LOGGER ───────────────────────────────────
-const logFile = path.join(__dirname, '../server.log');
+// Use the persistent /app/data directory so logs survive restarts/sleeps
+const logFile = path.join(__dirname, '../data/server.log');
 app.use((req, res, next) => {
     const logStr = `[${new Date().toISOString()}] ${req.method} ${req.url} | User: ${req.user ? req.user.id : 'anon'}\n`;
     try {
@@ -91,6 +93,20 @@ function authenticateToken(req, res, next) {
 
 app.get('/api/auth/config', (req, res) => {
     res.json({ googleClientId: process.env.GOOGLE_CLIENT_ID });
+});
+
+// Dedicated endpoint for GitHub Actions to trigger daily pre-scrape
+app.get('/api/internal/wake-and-scrape', async (req, res) => {
+    console.log('[API] Wake-and-scrape triggered via GitHub Action');
+    const { prescrapeAll } = require('./cron-prescrape');
+    
+    // We respond immediately so the GitHub Action can finish, 
+    // but the prescrapeAll() call will keep the process busy.
+    prescrapeAll()
+        .then(() => console.log('[API] Background pre-scrape completed.'))
+        .catch(e => console.error('[API] Background pre-scrape failed:', e));
+        
+    res.json({ status: 'triggered', message: 'Pre-scrape started in background' });
 });
 
 app.post('/api/auth/google', async (req, res) => {
@@ -495,6 +511,9 @@ app.listen(PORT, '0.0.0.0', () => {
     setTimeout(() => {
         console.log('[Startup] Executing deferred maintenance tasks...');
         
+        // 0. Run DB migrations check
+        runMigrations();
+
         // 1. Clear stale jobs from last time
         const staleDeleted = clearStaleJobs();
         if (staleDeleted > 0) console.log(`[DB] Cleared ${staleDeleted} stale jobs.`);
