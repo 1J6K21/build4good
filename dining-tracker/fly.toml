@@ -45,10 +45,10 @@ primary_region = "ord"              # Chicago — High capacity for 1GB machines
 
 [checks]
   [checks.health]
-    grace_period = "20s"
+    grace_period = "60s"
     interval     = "30s"
     method       = "GET"
     path         = "/api/auth/config"
     port         = 3333
-    timeout      = "10s"
+    timeout      = "15s"
     type         = "http"

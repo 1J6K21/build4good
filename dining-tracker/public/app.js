@@ -54,6 +54,16 @@ async function checkAuth() {
     }
     try {
         const res = await authFetch(`${API}/api/auth/me`);
+        
+        if (res.status === 429) {
+            toast("Rate limit reached. Please wait a moment.");
+            return;
+        }
+        if (res.status >= 500) {
+            toast("Server is busy. Retrying in several seconds...");
+            return;
+        }
+
         const data = await res.json();
 
         if (data.authenticated) {
@@ -62,9 +72,12 @@ async function checkAuth() {
             onLoginSuccess();
         } else {
             console.warn("[Auth] No session found. Reason:", data.error || "none");
-            clearToken();
-            showPage('login');
-            initGoogleSignIn();
+            // Only logout if it's a legitimate session failure
+            if (data.error === 'session_expired' || data.error === 'user_deleted') {
+                clearToken();
+                showPage('login');
+                initGoogleSignIn();
+            }
         }
     } catch (e) {
         console.error('[Auth] Connection error', e);

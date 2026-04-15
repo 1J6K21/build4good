@@ -61,8 +61,10 @@ const fs = require('fs');
     // Global rate limit: 200 requests per 15 minutes
     const globalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 200,
-    message: { error: 'Too many requests, please try again later.' }
+    max: 500,
+    message: { error: 'Too many requests, please try again later.' },
+    // Skip local requests (like the 5 AM pre-scrape) so they don't count against the limit
+    skip: (req) => req.ip === '127.0.0.1' || req.ip === '::1'
 });
 
 // Stricter limit for STARTING a scrape: 100 per hour
@@ -515,8 +517,7 @@ app.get('/api/menu/status', async (req, res) => {
         setInterval(() => cleanupMenus(30), 24 * 60 * 60 * 1000);
         const { prescrapeAll, schedulePrescrape } = require('./cron-prescrape');
         schedulePrescrape();
-        if (process.env.NODE_ENV === 'production' || process.env.FLY_APP_NAME) {
-            prescrapeAll().catch(e => console.error('[Startup] Pre-scrape error:', e));
-        }
-    }, 5000);
+        // REMOVED: prescrapeAll() on boot. It hogs resources (1GB RAM) and crashes startup.
+        // It will still run at 5 AM CST via schedulePrescrape() above.
+    }, 10000); // Wait 10s to ensure server is fully stable
 } // End of initializeRestOfApp
