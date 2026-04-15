@@ -1,39 +1,65 @@
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
-const cookieParser = require('cookie-parser');
-const jwt = require('jsonwebtoken');
-const { OAuth2Client } = require('google-auth-library');
-const {
-    getUser, upsertUser, updateCalorieGoal,
-    addMealLog, getMealLogs, getMealLogsRange, deleteMealLog,
-    getMenu, createScrapeJob, getScrapeJob, getAllLocations,
-    cleanupMenus, getShortcuts, saveShortcut, updateMacroGoals,
-    updateUserStats, updateTrackedNutrients, updateUserNutrients, updateUserGoals, updateUserGoal,
-    addWaitTime, getWaitTimeStats, getWaitTimeStatsAll, clearStaleJobs,
-    updateExperimentStatus, getExperimentLogs, addExperimentLog, deleteExperiment,
-    deleteExperimentLog, getExperiments, createExperiment,
-    getLeaderboard, getTopItems, findDiningTwin, getCalorieDebt,
-    getSavedScenarios, createSavedScenario, deleteSavedScenario,
-    runMigrations
-} = require('./db');
-
-// DB cleanup moved to post-startup deferral to speed up cold starts
-
-// Pre-scraper moved to post-startup deferral
-
-// Startup cleanup moved to post-startup deferral
-
 const fs = require('fs');
 
 const app = express();
-const rateLimit = require('express-rate-limit');
+const PORT = parseInt(process.env.PORT || '3333', 10);
 
-// Fly.io uses a proxy; needed for rate limiter to see real IPs
-app.set('trust proxy', 1);
+// 1. SERVE STATIC FILES IMMEDIATELY (Instant UI access)
+app.use(express.static(path.join(__dirname, '../public')));
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/index.html'));
+});
 
-// Global rate limit: 200 requests per 15 minutes
-const globalLimiter = rateLimit({
+// Dedicated endpoint for GitHub Actions - MOVED TO CRITICAL PATH
+app.get('/api/internal/wake-and-scrape', async (req, res) => {
+    console.log('[API] Wake-and-scrape triggered via GitHub Action');
+    const { prescrapeAll } = require('./cron-prescrape');
+    prescrapeAll()
+        .then(() => console.log('[API] Background pre-scrape completed.'))
+        .catch(e => console.error('[API] Background pre-scrape failed:', e));
+    res.json({ status: 'triggered', message: 'Pre-scrape started' });
+});
+
+// 2. START LISTENING NOW (Tells Fly.io/Browser we are ready in <200ms)
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n🍽️  MindfulMacros (Auth-Enabled)\n   Instant-Boot active on port ${PORT}`);
+    initializeRestOfApp();
+});
+
+// 3. BACKGROUND INITIALIZATION (Heavy stuff loads while user sees UI)
+function initializeRestOfApp() {
+    console.log('[Startup] Loading background modules...');
+    const cookieParser = require('cookie-parser');
+    const jwt = require('jsonwebtoken');
+    const { OAuth2Client } = require('google-auth-library');
+    const db = require('./db');
+
+    const {
+        getUser, upsertUser, updateCalorieGoal,
+        addMealLog, getMealLogs, getMealLogsRange, deleteMealLog,
+        getMenu, createScrapeJob, getScrapeJob, getAllLocations,
+        cleanupMenus, getShortcuts, saveShortcut, updateMacroGoals,
+        updateUserStats, updateTrackedNutrients, updateUserNutrients, updateUserGoals, updateUserGoal,
+        addWaitTime, getWaitTimeStats, getWaitTimeStatsAll, clearStaleJobs,
+        updateExperimentStatus, getExperimentLogs, addExperimentLog, deleteExperiment,
+        deleteExperimentLog, getExperiments, createExperiment,
+        getLeaderboard, getTopItems, findDiningTwin, getCalorieDebt,
+        getSavedScenarios, createSavedScenario, deleteSavedScenario,
+        runMigrations
+    } = db;
+
+    // All other logic will follow...
+
+const fs = require('fs');
+
+    // Fly.io uses a proxy; needed for rate limiter to see real IPs
+    app.set('trust proxy', 1);
+
+    const rateLimit = require('express-rate-limit');
+    // Global rate limit: 200 requests per 15 minutes
+    const globalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 200,
     message: { error: 'Too many requests, please try again later.' }
@@ -50,8 +76,8 @@ app.use('/api/', globalLimiter);
 // Only apply the strict limit to the POST request that starts the scraper
 app.post('/api/menu', scrapeStartLimiter);
 
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key';
+    const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+    const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key';
 
 // ── DEBUG LOGGER ───────────────────────────────────
 // Use the persistent /app/data directory so logs survive restarts/sleeps
@@ -95,19 +121,7 @@ app.get('/api/auth/config', (req, res) => {
     res.json({ googleClientId: process.env.GOOGLE_CLIENT_ID });
 });
 
-// Dedicated endpoint for GitHub Actions to trigger daily pre-scrape
-app.get('/api/internal/wake-and-scrape', async (req, res) => {
-    console.log('[API] Wake-and-scrape triggered via GitHub Action');
-    const { prescrapeAll } = require('./cron-prescrape');
-    
-    // We respond immediately so the GitHub Action can finish, 
-    // but the prescrapeAll() call will keep the process busy.
-    prescrapeAll()
-        .then(() => console.log('[API] Background pre-scrape completed.'))
-        .catch(e => console.error('[API] Background pre-scrape failed:', e));
-        
-    res.json({ status: 'triggered', message: 'Pre-scrape started in background' });
-});
+    // All other logic...
 
 app.post('/api/auth/google', async (req, res) => {
     const { credential } = req.body;
@@ -486,50 +500,23 @@ app.get('/api/menu/status', async (req, res) => {
     res.json({ status: 'scraping', step: job.step || job.status });
 });
 
-// ── STATIC FILE SERVING ────────────────────────────
-// Serve files FROM here if no API route matched
-app.use(express.static(path.join(__dirname, '../public')));
+    // Catch-all for SPA (must be last)
+    app.use((req, res) => {
+        res.sendFile(path.join(__dirname, '../public/index.html'));
+    });
 
-// Root redirect
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../public/index.html'));
-});
-
-// Catch-all for SPA (must be last)
-app.use((req, res) => {
-    res.sendFile(path.join(__dirname, '../public/index.html'));
-});
-
-// ── START ──────────────────────────────────────────
-const PORT = parseInt(process.env.PORT || '3333', 10);
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`\n🍽️  MindfulMacros (Auth-Enabled)\n   Running on port ${PORT}`);
-
-    // DEFERRED STARTUP TASKS
-    // Running these after 'listen' ensures the user gets a response 
-    // to their first request immediately, rather than waiting for boot-up chores.
+    // Final background chores
     setTimeout(() => {
         console.log('[Startup] Executing deferred maintenance tasks...');
-        
-        // 0. Run DB migrations check
         runMigrations();
-
-        // 1. Clear stale jobs from last time
         const staleDeleted = clearStaleJobs();
         if (staleDeleted > 0) console.log(`[DB] Cleared ${staleDeleted} stale jobs.`);
-
-        // 2. Run DB cleanup
         cleanupMenus(30);
         setInterval(() => cleanupMenus(30), 24 * 60 * 60 * 1000);
-
-        // 3. Setup Pre-Scraper
         const { prescrapeAll, schedulePrescrape } = require('./cron-prescrape');
         schedulePrescrape();
-
-        // 4. Trigger initial pre-scrape if in PROD
         if (process.env.NODE_ENV === 'production' || process.env.FLY_APP_NAME) {
-            console.log('[Startup] Executing background pre-scrape check...');
             prescrapeAll().catch(e => console.error('[Startup] Pre-scrape error:', e));
         }
-    }, 5000); // 5s delay gives priority to initial user traffic
-});
+    }, 5000);
+} // End of initializeRestOfApp
