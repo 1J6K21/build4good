@@ -405,8 +405,9 @@ async function scrapeMenu(locationSlug, periodSlug, date, onStep = () => { }) {
     const jitter = Math.random() * 2000 + 1000;
     await new Promise(r => setTimeout(r, jitter));
 
-    console.log(`[Scraper] Navigating to ${url}...`);
-    await page.goto(url, { waitUntil: 'networkidle0', timeout: 45000 });
+    console.log(`[Scraper] Navigating directly to ${url}...`);
+    // 60s is the sweet spot: enough for slow sites, but not so long the user thinks the app is dead.
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
     const title = await page.title();
     console.log('[Scraper] Page Title:', title);
@@ -426,7 +427,7 @@ async function scrapeMenu(locationSlug, periodSlug, date, onStep = () => { }) {
       }
       // Minimal wait for actual DOM table only if we don't have JSON
       if (!menuJson) {
-        await page.waitForSelector('.accordion-header, table', { timeout: 10000 });
+        await page.waitForSelector('.accordion-header, table', { timeout: 20000 });
       }
     } catch (e) {
       console.log('[Scraper] Info: Menu markers or JSON not found yet, trying one last wait.');
