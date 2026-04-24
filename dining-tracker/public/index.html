@@ -234,8 +234,14 @@
                             <h2 id="dashboardMealsTitle" style="margin: 0;">Today's Meals</h2>
                             <i id="mealsCollapseIcon" class="fa-solid fa-chevron-up" style="transition: transform 0.3s; color: var(--text-muted); font-size: 0.9rem; transform: rotate(180deg);"></i>
                         </div>
-                        <span class="card-date" id="todayDateLabel"></span>
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <span class="card-date" id="todayDateLabel"></span>
+                            <span id="exportHintTag" style="font-size: 0.65rem; color: var(--text-3); font-weight: 800; text-transform: uppercase; background: var(--surface2); padding: 2px 8px; border-radius: 100px; display: flex; align-items: center; gap: 4px;">
+                                <i class="fa-solid fa-circle-info"></i> Select to Export
+                            </span>
+                        </div>
                     </div>
+
                     <div id="mealsBulkActions" class="bulk-actions" style="display: none;" onclick="event.stopPropagation()">
                         <div class="bulk-count-group" style="display: flex; align-items: center; gap: 4px;">
                             <span id="bulkCount" class="bulk-count">0 selected</span>
@@ -243,13 +249,14 @@
                         </div>
                         <div class="bulk-btn-group" style="display: flex; gap: 8px;">
                             <button class="btn btn-sm btn-primary" onclick="aggregateSelectedMeals()">
-                                <i class="fa-solid fa-calculator"></i> Summary
+                                <i class="fa-solid fa-file-export"></i> Summary & Export
                             </button>
                             <button class="btn btn-sm btn-ghost" style="color: var(--red); border-color: rgba(239, 68, 68, 0.2);" onclick="removeSelectedMeals()">
                                 <i class="fa-solid fa-trash-can"></i> Delete
                             </button>
                         </div>
                     </div>
+
                 </div>
                 <div id="todayMealsListWrapper" style="transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out; max-height: 0px; overflow: hidden; opacity: 0;">
                     <div id="todayMealsList" class="meals-list">
@@ -260,13 +267,51 @@
                         </div>
                     </div>
                 </div>
-                <div style="padding: 15px; border-top: 1px solid var(--border); background: var(--surface2); border-radius: 0 0 12px 12px;">
-                    <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-2); margin-left: 5px;">+ Add calories from outside the dining hall</div>
-                    <div style="display: flex; gap: 10px; margin-top: 12px; align-items: center; padding: 0 5px;">
-                        <input type="number" id="gapCaloriesInput" class="form-input" placeholder="0" style="width: 100px; text-align: center; font-weight: bold;">
-                        <button class="btn btn-sm btn-primary" onclick="addExternalCalories()">Add</button>
+                <div style="padding: 24px 20px; border-top: 1px solid var(--border); background: var(--surface2); border-radius: 0 0 16px 16px; margin-top: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+                        <div style="font-size: 0.7rem; font-weight: 900; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.6;">Quick Logging Hub</div>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-sm" onclick="showPage('menu')" style="font-size: 0.65rem; font-weight: 800; padding: 6px 12px; background: white; border: 1px solid var(--border); color: var(--text-2);">FROM MENU</button>
+                            <button class="btn btn-sm" onclick="showPage('other-food')" style="font-size: 0.65rem; font-weight: 800; padding: 6px 12px; background: white; border: 1px solid var(--border); color: var(--text-2);">OTHER FOODS</button>
+                        </div>
+                    </div>
+                    
+                    <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; box-shadow: var(--shadow-sm);">
+                        <div style="display: flex; flex-direction: column; gap: 16px;">
+                            <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                                <div style="position: relative; width: 130px;">
+                                    <input type="number" id="gapCaloriesInput" class="form-input" placeholder="0" style="width: 100%; text-align: right; font-weight: 950; padding-right: 48px; font-size: 1.2rem; height: 48px; border-radius: 10px; border-color: rgba(0,0,0,0.1);">
+                                    <span style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 0.65rem; font-weight: 900; color: var(--text-3); letter-spacing: 0.05em;">CAL</span>
+                                </div>
+                                
+                                <div id="gapMacrosRow" style="display: flex; gap: 10px; align-items: center; padding: 0 15px; background: var(--surface2); border-radius: 10px; flex: 1; min-width: 260px; height: 48px; border: 1px solid rgba(0,0,0,0.05);">
+                                    <span style="font-size: 0.6rem; font-weight: 950; opacity: 0.4; text-transform: uppercase; margin-right: 5px; letter-spacing: 0.05em;">Opt. Macros</span>
+                                    <div class="macro-input-group" title="Protein (g)">
+                                        <span style="font-size: 0.7rem; font-weight: 800; color: var(--primary);">P</span>
+                                        <input type="number" id="gapProteinInput" placeholder="0" min="0">
+                                    </div>
+                                    <div class="macro-input-group" title="Carbs (g)">
+                                        <span style="font-size: 0.7rem; font-weight: 800; color: var(--amber);">C</span>
+                                        <input type="number" id="gapCarbsInput" placeholder="0" min="0">
+                                    </div>
+                                    <div class="macro-input-group" title="Fat (g)">
+                                        <span style="font-size: 0.7rem; font-weight: 800; color: var(--green);">F</span>
+                                        <input type="number" id="gapFatInput" placeholder="0" min="0">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <button class="btn btn-primary" style="width: 100%; height: 46px; font-weight: 950; letter-spacing: 0.1em; border-radius: 10px;" onclick="addExternalCalories()">IMPORT SNACK</button>
+                        </div>
+                    </div>
+                    <div style="margin-top: 15px; font-size: 0.65rem; color: var(--text-3); font-weight: 700; text-align: center; opacity: 0.7;">
+                        <i class="fa-solid fa-arrow-up" style="margin-right: 4px;"></i> Expand "Today's Meals" above to select and export logs
                     </div>
                 </div>
+
+
+
+
             </div>
 
     <!-- Aggregate Modal -->
@@ -289,6 +334,16 @@
                         </button>
                     </div>
                 </div>
+                <div class="aggregate-export-hint">
+                    <div class="export-hint-icon">
+                        <i class="fa-solid fa-file-export"></i>
+                    </div>
+                    <div class="export-hint-text">
+                        Need this summary for another app? You can export the total macros and calories as a clean text summary.
+                    </div>
+                    <button class="btn btn-sm btn-primary export-hint-btn" onclick="exportAggregateText()">Export Text</button>
+                </div>
+
             </div>
             <div class="modal-footer">
                 <button class="btn btn-primary" style="width: 100%;" onclick="closeAggregateModal()">Done</button>

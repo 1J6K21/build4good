@@ -1346,6 +1346,10 @@ async function aggregateSelectedMeals() {
         calories: 0, protein: 0, fat: 0, carbs: 0, sodium: 0,
         fiber: 0, sugars: 0, saturated_fat: 0, trans_fat: 0, cholesterol: 0
     });
+    
+    // Store for export
+    window.lastAggregated = agg;
+
 
     // Rounding
     Object.keys(agg).forEach(k => {
@@ -3889,6 +3893,10 @@ function updateNewspaperClippings(logs) {
 // ── EXTERNAL CALORIES GAP FILLER ───────────
 async function addExternalCalories() {
     const input = document.getElementById('gapCaloriesInput');
+    const pInput = document.getElementById('gapProteinInput');
+    const cInput = document.getElementById('gapCarbsInput');
+    const fInput = document.getElementById('gapFatInput');
+    
     if (!input) return;
     const calories = parseInt(input.value);
     
@@ -3897,13 +3905,17 @@ async function addExternalCalories() {
         return;
     }
     
+    const protein = parseInt(pInput ? pInput.value : 0) || 0;
+    const carbs = parseInt(cInput ? cInput.value : 0) || 0;
+    const fat = parseInt(fInput ? fInput.value : 0) || 0;
+    
     const itemToLog = {
         name: 'Filled calorie gap',
         calories: calories,
         portion: '1 Custom',
-        protein: 0,
-        fat: 0,
-        carbs: 0
+        protein: protein,
+        fat: fat,
+        carbs: carbs
     };
     
     const date = trackingDate || todayStr();
@@ -3912,6 +3924,10 @@ async function addExternalCalories() {
     
     if (success) {
         input.value = '';
+        if (pInput) pInput.value = '';
+        if (cInput) cInput.value = '';
+        if (fInput) fInput.value = '';
+        
         toast(`Added ${calories} external calories!`);
         // Refresh the dashboard to show new calorie total
         refreshDashboard();
@@ -3919,6 +3935,29 @@ async function addExternalCalories() {
         toast('Failed to add external calories.');
     }
 }
+
+function exportAggregateText() {
+    if (!window.lastAggregated) {
+        toast("No summary data to export.");
+        return;
+    }
+    const a = window.lastAggregated;
+    const text = `Meal Summary:
+- Calories: ${a.calories} kcal
+- Protein: ${a.protein}g
+- Carbs: ${a.carbs}g
+- Fat: ${a.fat}g
+- Sodium: ${a.sodium}mg
+- Fiber: ${a.fiber}g`;
+
+    navigator.clipboard.writeText(text).then(() => {
+        toast("Summary copied to clipboard!");
+    }).catch(err => {
+        console.error("Failed to copy", err);
+        toast("Failed to copy to clipboard.");
+    });
+}
+
 
 // ══════════════════════════════════════════════
 //  DINING HALL TWIN — Mirror Feature
