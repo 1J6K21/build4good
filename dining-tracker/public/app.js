@@ -2956,13 +2956,26 @@ async function initSimulatorBaseline() {
             total: Math.round((breakdown.breakfast + breakdown.lunch + breakdown.dinner + breakdown.snack) / days)
         };
         
-        // Update Static Labels
-        if (document.getElementById('simBreakfastBaseline')) document.getElementById('simBreakfastBaseline').textContent = `Your avg: ${window.simBaseline.breakfast} cal`;
-        if (document.getElementById('simLunchBaseline')) document.getElementById('simLunchBaseline').textContent = `Your avg: ${window.simBaseline.lunch} cal`;
-        if (document.getElementById('simDinnerBaseline')) document.getElementById('simDinnerBaseline').textContent = `Your avg: ${window.simBaseline.dinner} cal`;
-        if (document.getElementById('simSnackBaseline')) document.getElementById('simSnackBaseline').textContent = `Your avg: ${window.simBaseline.snack} cal`;
+        // Update Static Labels AND initialize slider values
+        if (document.getElementById('simBreakfastBaseline')) {
+            document.getElementById('simBreakfastBaseline').textContent = `Current avg: ${window.simBaseline.breakfast} cal`;
+            document.getElementById('simBreakfast').value = window.simBaseline.breakfast;
+        }
+        if (document.getElementById('simLunchBaseline')) {
+            document.getElementById('simLunchBaseline').textContent = `Current avg: ${window.simBaseline.lunch} cal`;
+            document.getElementById('simLunch').value = window.simBaseline.lunch;
+        }
+        if (document.getElementById('simDinnerBaseline')) {
+            document.getElementById('simDinnerBaseline').textContent = `Current avg: ${window.simBaseline.dinner} cal`;
+            document.getElementById('simDinner').value = window.simBaseline.dinner;
+        }
+        if (document.getElementById('simSnackBaseline')) {
+            document.getElementById('simSnackBaseline').textContent = `Current avg: ${window.simBaseline.snack} cal`;
+            document.getElementById('simSnack').value = window.simBaseline.snack;
+        }
         
         return window.simBaseline;
+
     } catch (e) {
         console.error("Baseline fetch failed", e);
         window.simBaseline = fallback;
@@ -2980,28 +2993,27 @@ async function updateFutureProjection() {
     const startWeight = parseFloat(currentUser.weight) || 150;
     const projectionDays = parseInt(document.getElementById('simPeriod')?.value || '90');
     
-    const breakfastMod = parseInt(document.getElementById('simBreakfast')?.value || '0');
-    const lunchMod = parseInt(document.getElementById('simLunch')?.value || '0');
-    const dinnerMod = parseInt(document.getElementById('simDinner')?.value || '0');
-    const snackMod = parseInt(document.getElementById('simSnack')?.value || '0');
+    // Values are now absolute caloric targets
+    const breakfastVal = parseInt(document.getElementById('simBreakfast')?.value || '0');
+    const lunchVal = parseInt(document.getElementById('simLunch')?.value || '0');
+    const dinnerVal = parseInt(document.getElementById('simDinner')?.value || '0');
+    const snackVal = parseInt(document.getElementById('simSnack')?.value || '0');
     
-    // Update live slider labels
-    const updateLabel = (id, base, mod) => {
+    // Update live slider labels (showing absolute target + diff from baseline)
+    const updateLabel = (id, base, target) => {
         const el = document.getElementById(id);
         if (!el) return;
-        const newVal = Math.max(0, base + mod);
-        el.textContent = `New: ${newVal} cal → ${(mod >= 0 ? '+' : '')}${mod}/day`;
+        const diff = target - base;
+        el.textContent = `Target: ${target} cal (${(diff >= 0 ? '+' : '−')}${Math.abs(diff)}/day)`;
     };
 
-    updateLabel('simBreakfastLabel', baseline.breakfast, breakfastMod);
-    updateLabel('simLunchLabel', baseline.lunch, lunchMod);
-    updateLabel('simDinnerLabel', baseline.dinner, dinnerMod);
-    updateLabel('simSnackLabel', baseline.snack, snackMod);
+    updateLabel('simBreakfastLabel', baseline.breakfast, breakfastVal);
+    updateLabel('simLunchLabel', baseline.lunch, lunchVal);
+    updateLabel('simDinnerLabel', baseline.dinner, dinnerVal);
+    updateLabel('simSnackLabel', baseline.snack, snackVal);
 
-    const simDailyAvg = Math.max(0, baseline.breakfast + breakfastMod) + 
-                        Math.max(0, baseline.lunch + lunchMod) + 
-                        Math.max(0, baseline.dinner + dinnerMod) + 
-                        Math.max(0, baseline.snack + snackMod);
+    const simDailyAvg = breakfastVal + lunchVal + dinnerVal + snackVal;
+
 
     // Math: Weight delta = (simDailyAvg - maintenance) * days / 3500
     const weightDelta = (simDailyAvg - maintenance) * projectionDays / 3500;
@@ -3136,10 +3148,11 @@ async function saveScenario() {
     const name = prompt("Enter a name for this habit scenario:", "New Daily Strategy");
     if (!name) return;
 
-    const bMod = parseInt(document.getElementById('simBreakfast')?.value || '0');
-    const lMod = parseInt(document.getElementById('simLunch')?.value || '0');
-    const dMod = parseInt(document.getElementById('simDinner')?.value || '0');
-    const sMod = parseInt(document.getElementById('simSnack')?.value || '0');
+    const baseline = window.simBaseline || { breakfast: 0, lunch: 0, dinner: 0, snack: 0 };
+    const bMod = parseInt(document.getElementById('simBreakfast')?.value || '0') - baseline.breakfast;
+    const lMod = parseInt(document.getElementById('simLunch')?.value || '0') - baseline.lunch;
+    const dMod = parseInt(document.getElementById('simDinner')?.value || '0') - baseline.dinner;
+    const sMod = parseInt(document.getElementById('simSnack')?.value || '0') - baseline.snack;
     const days = parseInt(document.getElementById('simPeriod')?.value || '90');
 
     try {
@@ -3148,6 +3161,7 @@ async function saveScenario() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, bMod, lMod, dMod, sMod, days })
         });
+
         if (res.ok) {
             toast(`Saved scenario: ${name}`);
             refreshDashboard(); 
@@ -3193,20 +3207,23 @@ async function deleteSavedScenario(id) {
 }
 
 window.getSimulatorState = function() {
-    if (!window.simBaseline) return null;
+    const baseline = window.simBaseline;
+    if (!baseline) return null;
     const projectionDays = parseInt(document.getElementById('simPeriod')?.value || '90');
-    const breakfastMod = parseInt(document.getElementById('simBreakfast')?.value || '0');
-    const lunchMod = parseInt(document.getElementById('simLunch')?.value || '0');
-    const dinnerMod = parseInt(document.getElementById('simDinner')?.value || '0');
-    const snackMod = parseInt(document.getElementById('simSnack')?.value || '0');
     
-    const simDailyAvg = Math.max(0, window.simBaseline.breakfast + breakfastMod) + 
-                        Math.max(0, window.simBaseline.lunch + lunchMod) + 
-                        Math.max(0, window.simBaseline.dinner + dinnerMod) + 
-                        Math.max(0, window.simBaseline.snack + snackMod);
+    // Sliders are absolute, mods are (value - baseline)
+    const breakfastMod = (parseInt(document.getElementById('simBreakfast')?.value || '0')) - baseline.breakfast;
+    const lunchMod     = (parseInt(document.getElementById('simLunch')?.value || '0')) - baseline.lunch;
+    const dinnerMod    = (parseInt(document.getElementById('simDinner')?.value || '0')) - baseline.dinner;
+    const snackMod     = (parseInt(document.getElementById('simSnack')?.value || '0')) - baseline.snack;
+    
+    const simDailyAvg = (baseline.breakfast + breakfastMod) + 
+                        (baseline.lunch + lunchMod) + 
+                        (baseline.dinner + dinnerMod) + 
+                        (baseline.snack + snackMod);
 
     return {
-        baseline: window.simBaseline,
+        baseline: baseline,
         mods: { breakfastMod, lunchMod, dinnerMod, snackMod },
         projectionDays,
         simDailyAvg,
@@ -3214,13 +3231,16 @@ window.getSimulatorState = function() {
     };
 };
 
+
 function resetSimulator() {
-    ['simBreakfast', 'simLunch', 'simDinner', 'simSnack'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.value = 0;
-    });
+    const baseline = window.simBaseline || { breakfast: 0, lunch: 0, dinner: 0, snack: 0 };
+    if (document.getElementById('simBreakfast')) document.getElementById('simBreakfast').value = baseline.breakfast;
+    if (document.getElementById('simLunch')) document.getElementById('simLunch').value = baseline.lunch;
+    if (document.getElementById('simDinner')) document.getElementById('simDinner').value = baseline.dinner;
+    if (document.getElementById('simSnack')) document.getElementById('simSnack').value = baseline.snack;
     updateFutureProjection();
 }
+
 
 
 function clearMealSelection() {

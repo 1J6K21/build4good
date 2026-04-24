@@ -598,37 +598,41 @@
                         </div>
                         <div class="simulator-sidebar">
                             <div class="sim-group">
-                                <label>Breakfast Shift</label>
-                                <div class="sim-baseline-info" id="simBreakfastBaseline">Your avg: -- cal</div>
+                                <label>Breakfast Target</label>
+                                <div class="sim-baseline-info" id="simBreakfastBaseline">Current avg: 0 cal</div>
                                 <div class="sim-slider-row">
-                                    <input type="range" id="simBreakfast" min="-500" max="500" value="0" step="10" oninput="updateFutureProjection()">
+                                    <input type="range" id="simBreakfast" min="0" max="1000" value="0" step="10" oninput="updateFutureProjection()">
                                 </div>
-                                <div class="sim-new-info" id="simBreakfastLabel">New: -- cal → --/day</div>
+                                <div class="sim-new-info" id="simBreakfastLabel">Target: 0 cal (±0/day)</div>
                             </div>
+
                             <div class="sim-group">
-                                <label>Lunch Shift</label>
-                                <div class="sim-baseline-info" id="simLunchBaseline">Your avg: -- cal</div>
+                                <label>Lunch Target</label>
+                                <div class="sim-baseline-info" id="simLunchBaseline">Current avg: 0 cal</div>
                                 <div class="sim-slider-row">
-                                    <input type="range" id="simLunch" min="-500" max="500" value="0" step="10" oninput="updateFutureProjection()">
+                                    <input type="range" id="simLunch" min="0" max="1000" value="0" step="10" oninput="updateFutureProjection()">
                                 </div>
-                                <div class="sim-new-info" id="simLunchLabel">New: -- cal → --/day</div>
+                                <div class="sim-new-info" id="simLunchLabel">Target: 0 cal (±0/day)</div>
                             </div>
+
                             <div class="sim-group">
-                                <label>Dinner Shift</label>
-                                <div class="sim-baseline-info" id="simDinnerBaseline">Your avg: -- cal</div>
+                                <label>Dinner Target</label>
+                                <div class="sim-baseline-info" id="simDinnerBaseline">Current avg: 0 cal</div>
                                 <div class="sim-slider-row">
-                                    <input type="range" id="simDinner" min="-500" max="500" value="0" step="10" oninput="updateFutureProjection()">
+                                    <input type="range" id="simDinner" min="0" max="1000" value="0" step="10" oninput="updateFutureProjection()">
                                 </div>
-                                <div class="sim-new-info" id="simDinnerLabel">New: -- cal → --/day</div>
+                                <div class="sim-new-info" id="simDinnerLabel">Target: 0 cal (±0/day)</div>
                             </div>
+
                             <div class="sim-group">
-                                <label>Snacking Shift</label>
-                                <div class="sim-baseline-info" id="simSnackBaseline">Your avg: -- cal</div>
+                                <label>Snacking Target</label>
+                                <div class="sim-baseline-info" id="simSnackBaseline">Current avg: 0 cal</div>
                                 <div class="sim-slider-row">
-                                    <input type="range" id="simSnack" min="-500" max="500" value="0" step="10" oninput="updateFutureProjection()">
+                                    <input type="range" id="simSnack" min="0" max="1000" value="0" step="10" oninput="updateFutureProjection()">
                                 </div>
-                                <div class="sim-new-info" id="simSnackLabel">New: -- cal → --/day</div>
+                                <div class="sim-new-info" id="simSnackLabel">Target: 0 cal (±0/day)</div>
                             </div>
+
                             <div class="sim-summary">
                                 <div class="sim-summary-item">
                                     <span class="sim-label">New Daily Avg</span>
