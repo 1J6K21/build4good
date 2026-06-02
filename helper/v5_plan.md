@@ -394,3 +394,5 @@ These are too big for now but worth noting:
 - **Dessert Unlock System:** Protein threshold gate before dessert items unlock in the menu. Gamifies the pre-meal decision.
 - **Eating-With Social Layer:** Tag who you ate with, surface "You eat 340 more calories with [name]" behavioral pattern.
 - **Danger Window Push Notifications:** PWA push notification sent at 6PM on each user's danger day-of-week with their current-day calorie status.
+
+- last checked site, logs, monitoring on 6/1/25
